@@ -1,3 +1,7 @@
+
+ref: https://github.com/jirutka/njs-typescript-starter
+
+
 # NGINX Template Repository
 
 ## How do I use this template?

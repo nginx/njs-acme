@@ -1,0 +1,41 @@
+{
+  "name": "njs-acme-experemental",
+  "version": "1.0.0",
+  "description": "## How do I use this template?",
+  "main": "index.js",
+  "scripts": {
+    "build": "rollup -c --bundleConfigAsCjs",
+    "test": "rollup -c --bundleConfigAsCjs && mocha",
+    "lint": "tslint --project tsconfig.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nginxinc/njs-acme-experemental.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "APACHE-2.0",
+  "bugs": {
+    "url": "https://github.com/nginxinc/njs-acme-experemental/issues"
+  },
+  "homepage": "https://github.com/nginxinc/njs-acme-experemental#readme",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^24.0.1",
+    "@rollup/plugin-node-resolve": "^15.0.2",
+    "@rollup/plugin-typescript": "^11.1.0",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^18.15.11",
+    "got": "^12.6.0",
+    "mocha": "^10.2.0",
+    "mocha-suite-hooks": "^0.1.0",
+    "nginx-testing": "^0.3.0",
+    "njs-types": "^0.7.10",
+    "node-fetch": "^3.3.1",
+    "rollup": "^3.20.2",
+    "rollup-plugin-add-git-msg": "^1.1.0",
+    "ts-node": "^10.9.1",
+    "tslib": "^2.5.0",
+    "tslint": "^6.1.3",
+    "typescript": "^5.0.4"
+  }
+}

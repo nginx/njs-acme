@@ -14,3 +14,9 @@ Thumbs.db
 # Logs #
 ########
 *.log
+
+#  JavaScript and TypeScript
+/dist/
+/lib/
+node_modules/
+*.log
