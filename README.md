@@ -30,7 +30,7 @@ This template includes all the scaffolding you need to get started on a standard
 
 <!--  DELETE THE LINES ABOVE THIS AND WRITE YOUR PROJECT README BELOW -- PLACEHOLDER SECTIONS HAVE BEEN INCLUDED FOR YOUR CONVENIENCE -->
 
-# {{REPOSITORY_NAME}}
+# njs_acme_experemental
 
 ## Requirements
 
@@ -46,10 +46,10 @@ Maecenas at vehicula justo. Suspendisse posuere elementum elit vel posuere. Etia
 
 ## Contributing
 
-Please see the [contributing guide](https://github.com/{{REPOSITORY_OWNER}}/{{REPOSITORY_URL}}/blob/main/CONTRIBUTING.md) for guidelines on how to best contribute to this project.
+Please see the [contributing guide](https://github.com/nginxinc/njs-acme-experemental/blob/main/CONTRIBUTING.md) for guidelines on how to best contribute to this project.
 
 ## License
 
-[Apache License, Version 2.0](https://github.com/{{REPOSITORY_OWNER}}/{{REPOSITORY_URL}}/blob/main/LICENSE)
+[Apache License, Version 2.0](https://github.com/nginxinc/njs-acme-experemental/blob/main/LICENSE)
 
 &copy; [F5, Inc.](https://www.f5.com/) 2023
