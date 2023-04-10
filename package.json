@@ -53,7 +53,7 @@
     "babel-register-ts": "^7.0.0",
     "eslint": "^7.19.0",
     "got": "^11.8.1",
-    "mocha": "^8.2.1",
+    "mocha": "^10.2.0",
     "mocha-suite-hooks": "^0.1.0",
     "nginx-testing": "^0.3.0",
     "njs-types": "~0.5.3",
