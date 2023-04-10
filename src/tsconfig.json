@@ -1,0 +1,33 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "target": "ES5",
+    "module": "es2015",
+    "lib": [
+      "ES2015",
+      "ES2016.Array.Include",
+      "ES2017.Object",
+      "ES2017.String",
+    ],
+    "declaration": true,
+    "outDir": "../lib",
+    "composite": true,
+    "tsBuildInfoFile": "../node_modules/.cache/tsc/src.tsbuildinfo",
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "isolatedModules": true,
+
+    "typeRoots": [],
+    "types": [
+      "njs-types",
+    ],
+  },
+  "include": [
+    ".",
+  ],
+  "files": [
+    // NOTE: Add/replace with ngx_stream_js_module.d.ts if you're developing
+    //  script for the stream module.
+    "../node_modules/njs-types/ngx_http_js_module.d.ts",
+  ],
+}

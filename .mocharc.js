@@ -6,12 +6,11 @@ module.exports = {
   checkLeaks: true,
   extension: ['ts'],
   require: [
-    "ts-node/register"
-    //     // 'babel-register-ts',
-    //     // 'source-map-support/register',
-    //     // 'tests/hooks.ts',
+    'babel-register-ts',
+    'source-map-support/register',
+    'integration-tests/hooks.ts',
   ],
   spec: [
-    'tests/**/*.test.ts',
+    'integration-tests/**/*.test.ts',
   ],
 }

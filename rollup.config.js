@@ -1,8 +1,11 @@
 // @ts-check
 import addGitMsg from 'rollup-plugin-add-git-msg'
-import typescript from '@rollup/plugin-typescript';
+import babel from '@rollup/plugin-babel'
 import commonjs from '@rollup/plugin-commonjs'
 import resolve from '@rollup/plugin-node-resolve'
+
+import pkg from './package.json'
+
 
 // List of njs built-in modules.
 const njsExternals = ['crypto', 'fs', 'querystring']
@@ -30,7 +33,11 @@ const options = {
     external: njsExternals,
     plugins: [
         // Transpile TypeScript sources to JS.
-        typescript(),
+        babel({
+            babelHelpers: 'bundled',
+            envName: 'njs',
+            extensions: ['.ts', '.mjs', '.js'],
+        }),
         // Resolve node modules.
         resolve({
             extensions: ['.mjs', '.js', '.json', '.ts'],
@@ -45,12 +52,9 @@ const options = {
             addGitMsg(),
         ] : [],
     ],
-    //   output: {
-    //     file: pkg.main,
-    //     format: 'es',
-    //   },
     output: {
-        dir: 'dist',
+        file: pkg.main,
+        format: 'es',
     },
 }
 export default options

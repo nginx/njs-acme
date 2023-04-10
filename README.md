@@ -1,40 +1,9 @@
+# njs-acme
 
-ref: https://github.com/jirutka/njs-typescript-starter
+This **NJS** module provides automatic certificates for NGINX.
 
+It uses Babel and Rollup to compile TypeScript sources into a single JavaScript file for `njs` and Mocha with nginx-testing for running integration tests against NGINX sever. This project uses [njs-typescript-starter](https://github.com/jirutka/njs-typescript-starter/tree/master) to write NJS modules and integration tests in TypeScript.
 
-# NGINX Template Repository
-
-## How do I use this template?
-
-**DO NOT FORK** -- this template is meant to be used from the **[`Use this template`](https://github.com/nginxinc/template-repository/generate)** feature.
-
-1. Click on **[`Use this template`](https://github.com/nginxinc/template-repository/generate)**
-2. Give a name to your project
-3. Wait until the first run of CI finishes (Github Actions will process the template and commit to your new repo)
-4. Clone your new project and happy coding!
-
-**NOTE**: **WAIT** until the first CI run on GitHub Actions before cloning your new project.
-
-## What is included on this template?
-
-This template includes all the scaffolding you need to get started on a standards compliant NGINX repository:
-
-- Standard license for NGINX OSS projects
-- Standard `.gitignore` with minimal defaults
-- Issue and PR templates
-- Contributing guidelines
-- Support guidelines
-- Security guidelines for reporting major vulnerabilities
-- NGINX Code of Conduct
-- README placeholder
-- Changelog placeholder
-- Codeowners placeholder
-
----
-
-<!--  DELETE THE LINES ABOVE THIS AND WRITE YOUR PROJECT README BELOW -- PLACEHOLDER SECTIONS HAVE BEEN INCLUDED FOR YOUR CONVENIENCE -->
-
-# njs_acme_experemental
 
 ## Requirements
 
@@ -42,7 +11,23 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam elit turpis, var
 
 ## Getting Started
 
-Duis sit amet sapien vel velit ornare vulputate. Nulla rutrum euismod risus ac efficitur. Curabitur in sagittis elit, a semper leo. Suspendisse malesuada aliquam velit, eu suscipit lorem vehicula at. Proin turpis lacus, semper in placerat in, accumsan non ipsum. Cras euismod, elit eget pretium laoreet, tortor nulla finibus tortor, nec hendrerit elit turpis ut eros. Quisque congue nisi id mauris molestie, eu condimentum dolor rutrum. Nullam eleifend elit ac lobortis tristique. Pellentesque nec tellus non mauris aliquet commodo a eu elit. Ut at feugiat metus, at tristique mauris. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae;
+1. Install dependencies:
+
+    npm install  # or yarn install
+
+2. Build the project and run tests:
+
+    npm test
+3. Start nginx and project’s build in the watch mode:
+
+    npm run start
+
+## Project Structure
+
+|                       Path              | Description |
+| ----                                    | ------------|
+| [src](src)                              | Contains your source code that will be compiled to the `dist/` directory. |
+| [integration-tests](integration-tests)  | Contains your source code of tests. |
 
 ## How to Use
 
