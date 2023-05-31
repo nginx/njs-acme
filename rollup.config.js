@@ -3,7 +3,7 @@ import addGitMsg from 'rollup-plugin-add-git-msg'
 import babel from '@rollup/plugin-babel'
 import commonjs from '@rollup/plugin-commonjs'
 import resolve from '@rollup/plugin-node-resolve'
-
+import json from "@rollup/plugin-json";
 import pkg from './package.json'
 
 
@@ -42,6 +42,7 @@ const options = {
         resolve({
             extensions: ['.mjs', '.js', '.json', '.ts'],
         }),
+        json(),
         // Convert CommonJS modules to ES6 modules.
         commonjs(),
         // Fix syntax of the default export.

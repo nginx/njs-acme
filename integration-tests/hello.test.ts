@@ -3,11 +3,11 @@ import { test } from 'mocha'
 import './hooks'
 
 
-test('/hello?name=njs', async function () {
-  const resp = await this.client.get('hello?name=njs')
+test('/acme', async function () {
+  const resp = await this.client.get('acme')
 
   assert(resp.statusCode === 200)
-  assert(resp.body.includes('Hello, world!'))
+  assert(resp.body.includes("hello server_name:proxy.nginx.com\nssl_server_name:\nssl_session_id:\n"))
 })
 
 // import { strict as assert } from 'assert'
