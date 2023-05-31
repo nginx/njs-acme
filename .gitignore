@@ -20,3 +20,11 @@ Thumbs.db
 /lib/
 node_modules/
 *.log
+
+# keys used in testing
+examples/*.public.json
+examples/*.private.json
+examples/*.key
+examples/*.csr
+examples/account_private_key.json
+examples/.well-known/*
