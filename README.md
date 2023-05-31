@@ -9,37 +9,50 @@ Some ACME providers, such as Let's Encrypt have strict rate limits. Please consu
 
 It uses Babel and Rollup to compile TypeScript sources into a single JavaScript file for `njs` and Mocha with nginx-testing for running integration tests against the NGINX server. This project uses [njs-typescript-starter](https://github.com/jirutka/njs-typescript-starter/tree/master) to write NJS modules and integration tests in TypeScript.
 
+To build a JavaScript code From TypeScript:
+
+1. Install dependencies
+
+        npm install
+
+1. Build it:
+
+        npm run build
+
+1. `./dist/main.js`  would contain the JavaScript code
+
+
 Here are some steps to test it via Docker:
 
 1. Start a test environment in Docker:
 
         make start-all
 
-1. Optionally you can watch for `nginx` log file in a separate shell:
+2. Optionally you can watch for `nginx` log file in a separate shell:
 
         docker compose logs -f nginx
 
-1. When started initially, nginx would not have certificates at all (/etc/letsencrypt/), so we can issue a new one by sending an HTTP request to a location with `js_content` handler:
+3. When started initially, nginx would not have certificates at all (/etc/letsencrypt/), so we can issue a new one by sending an HTTP request to a location with `js_content` handler:
 
         curl -vik --resolve proxy.nginx.com:8000:127.0.0.1 http://proxy.nginx.com:8000/acme/auto
 
-1. Send an HTTP request to nginx running in Docker:
+4. Send an HTTP request to nginx running in Docker:
 
         curl -vik --resolve proxy.nginx.com:8000:127.0.0.1 http://proxy.nginx.com:8000/
 
-1. Send an HTTPS request to nginx running in Docker to test a new certificate:
+5. Send an HTTPS request to nginx running in Docker to test a new certificate:
 
         curl -vik --resolve proxy.nginx.com:4443:127.0.0.1 https://proxy.nginx.com:4443
 
-1. Test with `openssl`:
+6. Test with `openssl`:
 
         openssl s_client -servername proxy.nginx.com -connect localhost:4443 -showcerts
 
-1. Display content of certificates
+7. Display content of certificates
 
-    docker compose exec -it nginx ls -la /etc/letsencrypt/
+        docker compose exec -it nginx ls -la /etc/letsencrypt/
 
-[docker-compose](./docker-compose.yml) uses volumes to persist artifacts (account keys, certificate, keys). Also, [letsencrypt/pebble](https://github.com/letsencrypt/pebble) is used for testing in Docker, so you don't really need to open up port 80 for challenge validation
+[Docker-compose](./docker-compose.yml) file uses volumes to persist artifacts (account keys, certificate, keys). Additionally, [letsencrypt/pebble](https://github.com/letsencrypt/pebble) is used for testing in Docker, so you don't need to open up port 80 for challenge validation.
 
 ## Project Structure
 
@@ -50,39 +63,49 @@ Here are some steps to test it via Docker:
 
 ## How to Use
 
-This library implements ACME RESTful client using [ngx.fetch](http://nginx.org/en/docs/njs/reference.html#ngx_fetch), [crypto API](http://nginx.org/en/docs/njs/reference.html#builtin_crypto), [PKI.js](https://pkijs.org/) APIs in NJS runtime. This allows using this ACME Client as a library to implement your flows. Such as witing a handler for `js_content`:
+This library implements ACME RESTful client using [ngx.fetch](http://nginx.org/en/docs/njs/reference.html#ngx_fetch), [crypto API](http://nginx.org/en/docs/njs/reference.html#builtin_crypto), [PKI.js](https://pkijs.org/) APIs in NJS runtime. This allows using this ACME Client as a library to implement your flows. Such as within a handler for `js_content`:
+
+The `clientAutoMode` exported function is a reference implementation of the `js_content` handler.
+
+This implementation uses the following env variables:
+
+   - `NJS_ACME_VERIFY_PROVIDER_HTTPS` sets verify ACME provider SSL certificate when connecting to it, default value `true`;
+   - `NJS_ACME_DIRECTORY_URI` ACME directory URL, default value `https://acme-staging-v02.api.letsencrypt.org/directory`
+   - `NJS_ACME_DIR` (or `njs_acme_dir` nginx variable)  default value `/etc/nginx`
+   - `NJS_ACME_ACCOUNT_EMAIL` (`njs_acme_account_email`) - email address for ACME provider
+   - `njs_acme_challenge_dir` - nginx variable with the path to where store HTTP-01 challenges
+   - `server_name` or `njs_acme_server_name` - nginx variable with the value of Subject Name for a certificate to issue
 
 
 ```TypeScript
 /**
- *  Demonstrates an automated workflow to issue new certificates for `r.variables.server_name`
+ *  Demonstrates an automated workflow to issue a new certificate for `r.variables.server_name`
  *
  * @param {NginxHTTPRequest} r Incoming request
  * @returns void
  */
 async function clientAutoMode(r: NginxHTTPRequest) {
-    const accountKey = await readOrCreateAccountKey(process.env.NJS_ACME_ACCOUNT_PRIVATE_JWK || '/etc/letsencrypt/account_private_key.json');
-    /* Create a new client */
+    const accountKey = await readOrCreateAccountKey(NJS_ACME_ACCOUNT_PRIVATE_JWK);
+    // /* Create a new ACME account */
     let client = new AcmeClient({
-        directoryUrl: process.env.ACME_DIRECTORY_URI || 'https://pebble/dir',
+        directoryUrl: DIRECTORY_URL,
         accountKey: accountKey
     });
-    // we can enable more logs
     // client.api.setDebug(true);
-    // don't verify Server Certificate of ACME provider, Comment/remove for Production
     client.api.setVerify(false);
-
-    // use the same email for the Account and in the CSR
-    const email = process.env.NJS_ACME_ACCOUNT_EMAIL || 'test@example.com'
-
+    const email = r.variables.njs_acme_account_email || process.env.NJS_ACME_ACCOUNT_EMAIL
+    if (email.length == 0) {
+        r.return(500,"Nginx variable 'njs_acme_account_email' or 'NJS_ACME_ACCOUNT_EMAIL' environment variable must be set")
+    }
     // create a new CSR
-    const commonName = r.variables.server_name?.toLowerCase()
+    const commonName = r.variables.server_name?.toLowerCase() || r.variables.njs_acme_server_name
+
     const params = {
         altNames: [commonName],
         commonName: commonName,
-        state: "WA",
-        country: "US",
-        organizationUnit: "CORP",
+        // state: "WA",
+        // country: "US",
+        // organizationUnit: "NGINX",
         emailAddress: email,
     }
 
@@ -99,25 +122,27 @@ async function clientAutoMode(r: NginxHTTPRequest) {
     fs.writeFileSync(pkeyPath, pkeyPem, 'utf-8');
     r.log(`njs-acme: [auto] Wrote Private key to ${pkeyPath}`);
 
-    const challengePath = r.variables.njs_acme_challenge_dir || ngx.conf_prefix + "/" + "html";
+    const challengePath = r.variables.njs_acme_challenge_dir!;
+    if (challengePath === undefined || challengePath.length == 0) {
+        r.return(500,"Nginx variable 'njs_acme_challenge_dir' must be set");
+    }
     const certificatePem = await client.auto({
         csr: result.pkcs10Ber,
         email: email,
         termsOfServiceAgreed: true,
         challengeCreateFn: async (authz, challenge, keyAuthorization) => {
             ngx.log(ngx.INFO, `njs-acme: [auto] Challenge Create (authz='${JSON.stringify(authz)}', challenge='${JSON.stringify(challenge)}', keyAuthorization='${keyAuthorization}')`);
+            ngx.log(ngx.INFO, `njs-acme: [auto] Writing challenge file so nginx can serve it via .well-known/acme-challenge/${challenge.token}`);
             const path = `${challengePath}/.well-known/acme-challenge/${challenge.token}`;
-            ngx.log(ngx.INFO, `njs-acme: [auto] Writing challenge file to ${path}`);
-            // Write to a FileSystem so NGINX can server it and ACME provider can validate it
             fs.writeFileSync(path, keyAuthorization, 'utf8');
         },
         challengeRemoveFn: async (authz, challenge, keyAuthorization) => {
             const path = `${challengePath}/.well-known/acme-challenge/${challenge.token}`;
             try {
                 fs.unlinkSync(path);
-                ngx.log(ngx.INFO, `njs-acme: [auto] removed challenge file ${path}`);
+                ngx.log(ngx.INFO, `njs-acme: [auto] removed challenge ${path}`);
             } catch (e) {
-                ngx.log(ngx.ERR, `njs-acme: [auto] failed to remove challenge file ${path}`);
+                ngx.log(ngx.ERR, `njs-acme: [auto] failed to remove challenge ${path}`);
             }
         }
     });
