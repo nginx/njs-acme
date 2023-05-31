@@ -668,23 +668,15 @@ export function pemToBuffer(pem: string, tag: PemTag = 'PRIVATE KEY') {
  * @returns {object} Certificate info
  */
 export async function readCertificateInfo(certPem: string) {
-  ngx.log(ngx.INFO, `acme-js: [utils] readCertificateInfo: started`);
+  const domains = readCsrDomainNames(certPem);
   const certBuffer = pemToBuffer(certPem, "CERTIFICATE");
   const cert = pkijs.Certificate.fromBER(certBuffer);
 
   const issuer = cert.issuer.typesAndValues.map((typeAndValue) => ({
     [typeAndValue.type]: typeAndValue.value.valueBlock.value,
   }));
-  ngx.log(ngx.INFO, `acme-js: [utils] readCertificateInfo: issuer: ${issuer}`);
   const notBefore = cert.notBefore.value;
-  ngx.log(ngx.INFO, `acme-js: [utils] readCertificateInfo: notBefore: ${notBefore}`);
   const notAfter = cert.notAfter.value;
-  ngx.log(ngx.INFO, `acme-js: [utils] readCertificateInfo: notAfter: ${notAfter} `);
-  // FIXME
-  // const domains = cert.subjectAlternativeNames?.filter(
-  //   (name) => name.type === 2
-  // );
-
   return {
     issuer: issuer,
     domains: domains,

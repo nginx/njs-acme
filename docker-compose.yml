@@ -34,9 +34,18 @@ services:
       - certs:/etc/letsencrypt/
     environment:
       - NJS_ACME_DIR=/etc/letsencrypt/
+      - NJS_ACME_VERIFY_PROVIDER_HTTPS=false
+      - NJS_ACME_DIRECTORY_URI=https://pebble/dir
+      - NJS_ACME_ACCOUNT_EMAIL=test@example.com
     ports:
       - 8000:8000
       - 4443:443
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://proxy.nginx.com:8000/acme/auto"]
+      interval: 10m30s
+      timeout: 90s
+      retries: 3
+      start_period: 10s
 #     networks:
 #       acmenet:
 #         ipv4_address: 10.30.50.4
