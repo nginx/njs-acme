@@ -32,7 +32,7 @@ RUN --mount=type=cache,target=/var/cache/apt <<EOF
     gpg --dry-run --quiet --no-keyring --import --import-options import-show \
         /usr/share/keyrings/nginx-archive-keyring.gpg
     echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] \
-        http://nginx.org/packages/mainline/ubuntu $(echo $PKG_RELEASE | cut -f2 -d~) nginx" \
+        http://nginx.org/packages/mainline/debian $(echo $PKG_RELEASE | cut -f2 -d~) nginx" \
         | tee /etc/apt/sources.list.d/nginx.list
     apt-get -qq install --yes --no-install-recommends --no-install-suggests \
         curl nginx-module-njs=${NGINX_VERSION}+${NJS_VERSION}-${PKG_RELEASE}
