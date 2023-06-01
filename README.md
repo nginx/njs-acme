@@ -19,7 +19,7 @@ To build a JavaScript code From TypeScript:
 
         npm run build
 
-1. `./dist/main.js`  would contain the JavaScript code
+1. `./dist/acme.js`  would contain the JavaScript code
 
 
 Here are some steps to test it via Docker:
