@@ -3,7 +3,6 @@ services:
   pebble:
     image: letsencrypt/pebble:latest
     command: pebble -config /etc/pebble/config.json
-    # -strict -dnsserver 10.30.50.3:8053
     hostname: pebble
     volumes:
       - ./integration-tests/pebble/:/etc/pebble/
@@ -11,18 +10,12 @@ services:
       - 14000:443  # HTTPS ACME API
       # - 14000:14000  # HTTPS ACME API
       - 15000:15000  # HTTPS Management API
-    # networks:
-    #   acmenet:
-    #     ipv4_address: 10.30.50.2
   challtestsrv:
     image: letsencrypt/pebble-challtestsrv:latest
     command: pebble-challtestsrv -defaultIPv6 "" -defaultIPv4 10.30.50.3
     hostname: challtestsrv
     ports:
       - 8055:8055  # HTTP Management API
-    # networks:
-    #   acmenet:
-    #     ipv4_address: 10.30.50.3
   nginx:
     image: nginxinc/njs-acme-experemental
     build: .
@@ -30,7 +23,7 @@ services:
     hostname: proxy.nginx.com
     volumes:
       - ./examples:/etc/nginx/examples/
-      - ./dist:/etc/nginx/dist/
+      # - ./dist:/etc/nginx/dist/
       - certs:/etc/letsencrypt/
     environment:
       - NJS_ACME_DIR=/etc/letsencrypt/
@@ -42,19 +35,9 @@ services:
       - 4443:443
     healthcheck:
       test: ["CMD", "curl", "-f", "http://proxy.nginx.com:8000/acme/auto"]
-      interval: 10m30s
+      interval: 1m30s
       timeout: 90s
       retries: 3
       start_period: 10s
-#     networks:
-#       acmenet:
-#         ipv4_address: 10.30.50.4
-# networks:
-#   acmenet:
-#     driver: bridge
-#     ipam:
-#       driver: default
-#       config:
-#         - subnet: 10.30.50.0/24
 volumes:
   certs:
