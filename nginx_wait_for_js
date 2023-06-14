@@ -1,0 +1,24 @@
+#!/bin/sh
+JS_FILE=/usr/lib/nginx/njs_modules/acme.js
+
+# wait until the .js file appears
+while ! [ -f $JS_FILE ]
+do
+  echo "Waiting for $JS_FILE to appear..."
+  sleep 1
+done
+
+# start nginx in background
+echo "Starting nginx..."
+$@ &
+
+sleep 3
+
+echo "Watching for changes..."
+
+# when the .js file is modified, reload nginx
+inotifywait -m -e create,modify $JS_FILE |
+  while read filename
+  do
+    nginx -s reload
+  done

@@ -1,7 +1,7 @@
-version: '3'
 services:
   pebble:
     image: letsencrypt/pebble:latest
+    platform: linux/amd64
     command: pebble -config /etc/pebble/config.json
     hostname: pebble
     volumes:
@@ -12,18 +12,35 @@ services:
       - 15000:15000  # HTTPS Management API
   challtestsrv:
     image: letsencrypt/pebble-challtestsrv:latest
+    platform: linux/amd64
     command: pebble-challtestsrv -defaultIPv6 "" -defaultIPv4 10.30.50.3
     hostname: challtestsrv
     ports:
       - 8055:8055  # HTTP Management API
+  node:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM node:18
+        WORKDIR /app
+        COPY package*.json .
+        RUN npm ci
+        CMD npm run watch
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - node_dist:/app/dist
   nginx:
     image: nginxinc/njs-acme-experemental
     build: .
-    command: nginx -c examples/nginx.conf
+    command: /nginx_wait_for_js nginx -c examples/nginx.conf
+    depends_on:
+      - node
     hostname: proxy.nginx.com
     volumes:
       - ./examples:/etc/nginx/examples/
-      # - ./dist:/etc/nginx/dist/
+      - ./nginx_wait_for_js:/nginx_wait_for_js
+      - node_dist:/usr/lib/nginx/njs_modules/
       - certs:/etc/letsencrypt/
     environment:
       - NJS_ACME_DIR=/etc/letsencrypt/
@@ -41,3 +58,5 @@ services:
       start_period: 10s
 volumes:
   certs:
+  node_modules:
+  node_dist:
