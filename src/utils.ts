@@ -1,6 +1,7 @@
 import x509 from './x509.js'
 import * as pkijs from 'pkijs';
 import * as asn1js from 'asn1js';
+import fs from 'fs';
 
 const DEFAULT_ACCOUNT_KEY_PATH = `${ngx.conf_prefix || '/etc/nginx'}/account_private_key.json`;
 
@@ -132,9 +133,8 @@ export async function generateKey() {
  * @throws {Error} - If the account key cannot be read or generated.
  */
 export async function readOrCreateAccountKey(path: string = DEFAULT_ACCOUNT_KEY_PATH): Promise<CryptoKey> {
-  const fs = require('fs');
   try {
-    const accountKeyJWK = fs.readFileSync(path);
+    const accountKeyJWK = fs.readFileSync(path, 'utf8');
     ngx.log(ngx.INFO, `acme-njs: [utils] Using account key from ${path}`);
     return await crypto.subtle.importKey('jwk', JSON.parse(accountKeyJWK), ACCOUNT_KEY_ALG_IMPORT, true, ["sign"]);
   } catch (e) {
@@ -143,7 +143,7 @@ export async function readOrCreateAccountKey(path: string = DEFAULT_ACCOUNT_KEY_
     /* Generate a new RSA key pair for ACME account */
     const keys = (await generateKey()) as Required<CryptoKeyPair>;
     const jwkFormated = await crypto.subtle.exportKey("jwk", keys.privateKey)
-    fs.writeFileSync(path, JSON.stringify(jwkFormated), 'utf8');
+    fs.writeFileSync(path, JSON.stringify(jwkFormated));
     ngx.log(ngx.INFO, `acme-njs: [utils] Generated a new account key and saved it to ${path}`);
     return keys.privateKey;
   }
@@ -703,8 +703,9 @@ export function splitPemChain(chainPem: Buffer | string) {
     .map((pem) => pem.match(/\s*-----BEGIN ([A-Z0-9- ]+)-----\r?\n?([\S\s]+)\r?\n?-----END \1-----/))
     /* Filter out non-matches or empty bodies */
     .filter((pem) => pem && pem[2] && pem[2].replace(/[\r\n]+/g, '').trim())
-    .map(([pem, header]) => pem);
+    .map(([pem, _]) => pem);
 }
+
 
 /**
  * Reads the common name and alternative names from a CSR (Certificate Signing Request).
@@ -721,4 +722,55 @@ export function readCsrDomainNames(csrPem: string | Buffer): { commonName: strin
     commonName: x509.get_oid_value(csr, "2.5.4.3"),
     altNames: x509.get_oid_value(csr, "2.5.29.17")
   };
+}
+
+
+/**
+ * Convenience method to return the value of a given environment variable or
+ * nginx variable. Will return the environment variable if that is found first.
+ * Requires that env vars be the uppercase version of nginx vars.
+ * If no default is given and the variable is not found, throws an error.
+ * @param r Nginx HTTP Request
+ * @param varname Name of the variable
+ * @returns value of the variable
+ */
+export function getVariable(r: NginxHTTPRequest, varname: string, defaultVal?: string) {
+  const retval = process.env[varname.toUpperCase()] || r.variables[varname] || defaultVal
+  if (retval === undefined) {
+    throw new Error(`Variable ${varname} not found and no default value given.`)
+  }
+  return retval
+}
+
+
+/**
+ * Return an array of hostnames specified in the njs_acme_server_names variable
+ * @param r request
+ * @returns array of hostnames
+ */
+export function getAcmeServerNames(r: NginxHTTPRequest) {
+  const nameStr = getVariable(r, 'njs_acme_server_names') // no default == mandatory
+  // split string value on comma and/or whitespace and lowercase each element
+  return nameStr.split(/[,\s]+/).map((n) => n.toLocaleLowerCase())
+}
+
+
+/**
+ * Return the path where ACME magic happens
+ * @param r request
+ * @returns configured path or default
+ */
+export function acmeDir(r: NginxHTTPRequest) {
+  return getVariable(r, 'njs_acme_dir', '/etc/acme');
+}
+
+
+/**
+ * Joins args with slashes and removes duplicate slashes
+ * @param args path fragments to join
+ * @returns joined path string
+ */
+export function joinPaths(...args: string[]) {
+  // join args with a slash remove duplicate slashes
+  return args.join('/').replace(/\/+/g, '/')
 }
