@@ -1,7 +1,7 @@
-import { toPEM, readOrCreateAccountKey, generateKey, createCsr, readCertificateInfo, splitPemChain, pemToBuffer, readCsrDomainNames } from './utils'
-import { HttpClient, directories } from './api'
+import { toPEM, readOrCreateAccountKey, generateKey, createCsr, readCertificateInfo, getAcmeServerNames, getVariable, joinPaths, acmeDir } from './utils'
+import { HttpClient } from './api'
 import { AcmeClient } from './client'
-var fs = require('fs');
+import fs from 'fs';
 
 const KEY_SUFFIX = '.key';
 const CERTIFICATE_SUFFIX = '.crt';
@@ -39,7 +39,7 @@ function stringToBoolean(stringValue: String, val = false) {
  */
 async function clientNewAccount(r: NginxHTTPRequest) {
     const accountKey = await readOrCreateAccountKey(NJS_ACME_ACCOUNT_PRIVATE_JWK);
-    // /* Create a new ACME account */
+    // Create a new ACME account
     let client = new AcmeClient({
         directoryUrl: DIRECTORY_URL,
         accountKey: accountKey
@@ -49,11 +49,15 @@ async function clientNewAccount(r: NginxHTTPRequest) {
     // do not validate ACME provider cert
     client.api.setVerify(false);
 
-    const account = await client.createAccount({
-        termsOfServiceAgreed: true,
-        contact: ['mailto:test@example.com']
-    });
-    return r.return(200, JSON.stringify(account));
+    try {
+        const account = await client.createAccount({
+            termsOfServiceAgreed: true,
+            contact: ['mailto:test@example.com']
+        });
+        return r.return(200, JSON.stringify(account));
+    } catch (e) {
+        ngx.log(ngx.ERR, `Error creating ACME account. Error=${e}`)
+    }
 }
 
 /**
@@ -63,15 +67,19 @@ async function clientNewAccount(r: NginxHTTPRequest) {
  * @returns void
  */
 async function clientAutoMode(r: NginxHTTPRequest) {
-    const prefix = r.variables.njs_acme_dir || NJS_ACME_DIR;
-    const commonName = r.variables.server_name?.toLowerCase() || r.variables.njs_acme_server_name;
-    const pkeyPath = prefix + commonName + KEY_SUFFIX;
-    const csrPath = prefix + commonName + '.csr';
-    const certPath = prefix + commonName + CERTIFICATE_SUFFIX;
+    const prefix = acmeDir(r);
+    const serverNames = getAcmeServerNames(r);
 
-    const email = r.variables.njs_acme_account_email || process.env.NJS_ACME_ACCOUNT_EMAIL;
-    if (email.length === 0) {
-        r.return(500, "Nginx variable 'njs_acme_account_email' or 'NJS_ACME_ACCOUNT_EMAIL' environment variable must be set");
+    const commonName = serverNames[0];
+    const pkeyPath = joinPaths(prefix, commonName + KEY_SUFFIX);
+    const csrPath = joinPaths(prefix, commonName + '.csr');
+    const certPath = joinPaths(prefix, commonName + CERTIFICATE_SUFFIX);
+
+    let email
+    try {
+        email = getVariable(r, 'njs_acme_account_email');
+    } catch {
+        return r.return(500, "Nginx variable 'njs_acme_account_email' or 'NJS_ACME_ACCOUNT_EMAIL' environment variable must be set");
     }
 
     let certificatePem;
@@ -120,16 +128,25 @@ async function clientAutoMode(r: NginxHTTPRequest) {
 
         const result = await createCsr(params);
         fs.writeFileSync(csrPath, toPEM(result.pkcs10Ber, "CERTIFICATE REQUEST"), 'utf-8');
+
         const privKey = await crypto.subtle.exportKey("pkcs8", result.keys.privateKey);
         pkeyPem = toPEM(privKey, "PRIVATE KEY");
         fs.writeFileSync(pkeyPath, pkeyPem, 'utf-8');
-        r.log(`njs-acme: [auto] Wrote Private key to ${pkeyPath}`);
+        ngx.log(ngx.INFO, `njs-acme: [auto] Wrote Private key to ${pkeyPath}`);
 
-        const challengePath = r.variables.njs_acme_challenge_dir!;
+        // default challengePath = acmeDir/challenge
+        const challengePath = getVariable(r, 'njs_acme_challenge_dir', joinPaths(acmeDir(r), 'challenge'));
         if (challengePath === undefined || challengePath.length === 0) {
-            r.return(500, "Nginx variable 'njs_acme_challenge_dir' must be set");
+            return r.return(500, "Nginx variable 'njs_acme_challenge_dir' must be set");
         }
-        r.log(`njs-acme: [auto] Issuing a new Certificate: ${JSON.stringify(params)}`);
+        ngx.log(ngx.INFO, `njs-acme: [auto] Issuing a new Certificate: ${JSON.stringify(params)}`);
+        const fullChallengePath = joinPaths(challengePath, '.well-known/acme-challenge');
+        try {
+            fs.mkdirSync(fullChallengePath, { recursive: true });
+        } catch (e) {
+            ngx.log(ngx.ERR, `Error creating directory to store challenges at ${fullChallengePath}. Ensure the ${challengePath} directory is writable by the nginx user.`)
+            return r.return(500, "Cannot create challenge directory");
+        }
 
         certificatePem = await client.auto({
             csr: result.pkcs10Ber,
@@ -138,11 +155,11 @@ async function clientAutoMode(r: NginxHTTPRequest) {
             challengeCreateFn: async (authz, challenge, keyAuthorization) => {
                 ngx.log(ngx.INFO, `njs-acme: [auto] Challenge Create (authz='${JSON.stringify(authz)}', challenge='${JSON.stringify(challenge)}', keyAuthorization='${keyAuthorization}')`);
                 ngx.log(ngx.INFO, `njs-acme: [auto] Writing challenge file so nginx can serve it via .well-known/acme-challenge/${challenge.token}`);
-                const path = `${challengePath}/.well-known/acme-challenge/${challenge.token}`;
-                fs.writeFileSync(path, keyAuthorization, 'utf8');
+                const path = joinPaths(fullChallengePath, challenge.token);
+                fs.writeFileSync(path, keyAuthorization);
             },
             challengeRemoveFn: async (authz, challenge, keyAuthorization) => {
-                const path = `${challengePath}/.well-known/acme-challenge/${challenge.token}`;
+                const path = joinPaths(fullChallengePath, challenge.token);
                 try {
                     fs.unlinkSync(path);
                     ngx.log(ngx.INFO, `njs-acme: [auto] removed challenge ${path}`);
@@ -152,7 +169,7 @@ async function clientAutoMode(r: NginxHTTPRequest) {
             }
         });
         certInfo = await readCertificateInfo(certificatePem);
-        fs.writeFileSync(certPath, certificatePem, 'utf-8');
+        fs.writeFileSync(certPath, certificatePem);
         r.log(`njs-acme: wrote certificate to ${certPath}`);
     }
 
@@ -167,17 +184,17 @@ async function clientAutoMode(r: NginxHTTPRequest) {
 async function persistGeneratedKeys(keys: CryptoKeyPair) {
     crypto.subtle.exportKey("pkcs8", keys.privateKey).then(key => {
         const pemExported = toPEM(key as ArrayBuffer, "PRIVATE KEY");
-        fs.writeFileSync(NJS_ACME_DIR + "/account.private.key", pemExported, 'utf8');
+        fs.writeFileSync(joinPaths(NJS_ACME_DIR, "account.private.key"), pemExported);
     });
     crypto.subtle.exportKey("spki", keys.publicKey).then(key => {
         const pemExported = toPEM(key as ArrayBuffer, "PUBLIC KEY");
-        fs.writeFileSync(NJS_ACME_DIR + "/account.public.key", pemExported, 'utf8');
+        fs.writeFileSync(joinPaths(NJS_ACME_DIR, "account.public.key"), pemExported);
     });
     crypto.subtle.exportKey("jwk", keys.privateKey).then(key => {
-        fs.writeFileSync(NJS_ACME_DIR + "/account.private.json", JSON.stringify(key), 'utf8');
+        fs.writeFileSync(joinPaths(NJS_ACME_DIR, "account.private.json"), JSON.stringify(key));
     });
     crypto.subtle.exportKey("jwk", keys.publicKey).then(key => {
-        fs.writeFileSync(NJS_ACME_DIR + "/account.public.json", JSON.stringify(key), 'utf8');
+        fs.writeFileSync(joinPaths(NJS_ACME_DIR, "account.public.json"), JSON.stringify(key));
     });
 }
 
@@ -187,12 +204,8 @@ async function persistGeneratedKeys(keys: CryptoKeyPair) {
  * @returns
  */
 async function acmeNewAccount(r: NginxHTTPRequest) {
-
     ngx.log(ngx.ERR, `process.env.NJS_ACME_VERIFY_PROVIDER_HTTPS: ${process.env.NJS_ACME_VERIFY_PROVIDER_HTTPS}`);
     ngx.log(ngx.ERR, `VERIFY_PROVIDER_HTTPS: ${VERIFY_PROVIDER_HTTPS}`);
-
-
-
 
     /* Generate a new RSA key pair for ACME account */
     const keys = (await generateKey()) as Required<CryptoKeyPair>;
@@ -224,12 +237,13 @@ async function acmeNewAccount(r: NginxHTTPRequest) {
 }
 
 /**
- * Create a new certificate Signing Request
+ * Create a new certificate Signing Request - Example implementation
  * @param r
  * @returns
  */
 async function createCsrHandler(r: NginxHTTPRequest) {
     const { pkcs10Ber, keys } = await createCsr({
+        // EXAMPLE VALUES BELOW
         altNames: ["proxy1.f5.com", "proxy2.f5.com"],
         commonName: "proxy.f5.com",
         state: "WA",
@@ -245,15 +259,15 @@ async function createCsrHandler(r: NginxHTTPRequest) {
     return r.return(200, result);
 }
 
-/** Retrieves the cert based on the Nginx HTTP request.
-*
-* @param {NginxHTTPRequest} r - The Nginx HTTP request object.
-* @returns {string, string} - The path and cert associated with the server name.
-*/
+/**
+ * Retrieves the cert based on the Nginx HTTP request.
+ * @param {NginxHTTPRequest} r - The Nginx HTTP request object.
+ * @returns {string, string} - The path and cert associated with the server name.
+ */
 function js_cert(r: NginxHTTPRequest) {
-    const prefix = r.variables.njs_acme_dir || NJS_ACME_DIR;
+    const prefix = acmeDir(r);
     let { path, data } = read_cert_or_key(prefix, r.variables.ssl_server_name?.toLowerCase() || '', CERTIFICATE_SUFFIX);
-    // r.log(`njs-acme: Loaded cert for ${r.variables.ssl_server_name} from path: ${path}`);
+    // ngx.log(ngx.INFO, `njs-acme: Loaded cert for ${r.variables.ssl_server_name} from path: ${path}`);
     if (data.length == 0) {
         r.log(`njs-acme: seems there is no cert for ${r.variables.ssl_server_name} from path: ${path}`);
         /*
@@ -261,41 +275,42 @@ function js_cert(r: NginxHTTPRequest) {
         r.subrequest('http://localhost:8000/acme/auto',
             {detached: true, method: 'GET', body: undefined});
         r.log(`njs-acme: notified /acme/auto`);
-
         */
     }
     return path;
 }
 
-/** Retrieves the key based on the Nginx HTTP request.
-*
-* @param {NginxHTTPRequest} r - The Nginx HTTP request object.
-* @returns {string} - The path and key associated with the server name.
-*/
+/**
+ * Retrieves the key based on the Nginx HTTP request.
+ * @param {NginxHTTPRequest} r - The Nginx HTTP request object.
+ * @returns {string} - The path and key associated with the server name.
+ */
 function js_key(r: NginxHTTPRequest) {
-    const prefix = r.variables.njs_acme_dir || NJS_ACME_DIR;
-    let { path, data } = read_cert_or_key(prefix, r.variables.ssl_server_name?.toLowerCase() || '', KEY_SUFFIX);
+    const prefix = acmeDir(r);
+    const { path } = read_cert_or_key(prefix, r.variables.ssl_server_name?.toLowerCase() || '', KEY_SUFFIX);
     // r.log(`njs-acme: loaded key for ${r.variables.ssl_server_name} from path: ${path}`);
     return path
 }
 
 function read_cert_or_key(prefix: string, domain: string, suffix: string) {
-    var none_wildcard_path = String.prototype.concat(prefix, domain, suffix);
-    var wildcard_path = String.prototype.concat(prefix, domain.replace(/.*?\./, '*.'), suffix);
-    var data = '';
+    const none_wildcard_path = joinPaths(prefix, domain + suffix);
+    const wildcard_path = joinPaths(prefix, domain.replace(/.*?\./, '*.') + suffix);
 
+    let data = '';
     var path = '';
+
     try {
-        data = fs.readFileSync(none_wildcard_path);
+        data = fs.readFileSync(none_wildcard_path, 'utf8');
         path = none_wildcard_path;
     } catch (e) {
         try {
-            data = fs.readFileSync(wildcard_path);
+            data = fs.readFileSync(wildcard_path, 'utf8');
             path = wildcard_path;
         } catch (e) {
             data = '';
         }
     }
+
     return { path, data };
 }
 

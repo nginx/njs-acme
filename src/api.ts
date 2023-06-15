@@ -293,7 +293,7 @@ export class HttpClient {
             // TODO: refactor maybe
             const respData = await resp.json();
             /* Retry on bad nonce - https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-6.4 */
-            if (respData && respData.type && (respData.type === 'urn:ietf:params:acme:error:badNonce') && (attempts < this.maxBadNonceRetries)) {
+            if (respData?.type === 'urn:ietf:params:acme:error:badNonce' && (attempts < this.maxBadNonceRetries)) {
                 nonce = resp.headers.get('replay-nonce') || null;
                 attempts += 1;
 
