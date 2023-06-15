@@ -28,10 +28,10 @@ services:
         CMD npm run watch
     volumes:
       - .:/app
-      - node_modules:/app/node_modules
+      - /app/node_modules
       - node_dist:/app/dist
   nginx:
-    image: nginxinc/njs-acme-experemental
+    image: nginxinc/njs-acme
     build: .
     command: /nginx_wait_for_js nginx -c examples/nginx.conf
     depends_on:
@@ -58,5 +58,4 @@ services:
       start_period: 10s
 volumes:
   certs:
-  node_modules:
   node_dist:
