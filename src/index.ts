@@ -1,36 +1,10 @@
-import { toPEM, readOrCreateAccountKey, generateKey, createCsr, readCertificateInfo, getAcmeServerNames, getVariable, joinPaths, acmeDir } from './utils'
+import { toPEM, readOrCreateAccountKey, generateKey, createCsr, readCertificateInfo, acmeServerNames, getVariable, joinPaths, acmeDir, acmeAccountPrivateJWKPath, acmeDirectoryURI, acmeVerifyProviderHTTPS } from './utils'
 import { HttpClient } from './api'
 import { AcmeClient } from './client'
 import fs from 'fs';
 
 const KEY_SUFFIX = '.key';
 const CERTIFICATE_SUFFIX = '.crt';
-const ACCOUNT_JWK_FILENAME = process.env.NJS_ACME_ACCOUNT_JWK_FILENAME || 'account_private_key.json'
-const NJS_ACME_DIR = process.env.NJS_ACME_DIR || ngx.conf_prefix;
-const NJS_ACME_ACCOUNT_PRIVATE_JWK = process.env.NJS_ACME_ACCOUNT_PRIVATE_JWK || NJS_ACME_DIR + '/' + ACCOUNT_JWK_FILENAME
-const DIRECTORY_URL = process.env.NJS_ACME_DIRECTORY_URI || 'https://acme-staging-v02.api.letsencrypt.org/directory'
-const VERIFY_PROVIDER_HTTPS = stringToBoolean(process.env.NJS_ACME_VERIFY_PROVIDER_HTTPS, true);
-
-function stringToBoolean(stringValue: String, val = false) {
-    switch (stringValue?.toLowerCase()?.trim()) {
-        case "true":
-        case "yes":
-        case "1":
-            return true;
-
-        case "false":
-        case "no":
-        case "0":
-            return false;
-        case null:
-        case undefined:
-            return val;
-
-        default:
-            return val;
-    }
-}
-
 
 /**
  * Using AcmeClient to create a new account. It creates an account key if it doesn't exists
@@ -38,16 +12,16 @@ function stringToBoolean(stringValue: String, val = false) {
  * @returns void
  */
 async function clientNewAccount(r: NginxHTTPRequest) {
-    const accountKey = await readOrCreateAccountKey(NJS_ACME_ACCOUNT_PRIVATE_JWK);
+    const accountKey = await readOrCreateAccountKey(acmeAccountPrivateJWKPath(r));
     // Create a new ACME account
     let client = new AcmeClient({
-        directoryUrl: DIRECTORY_URL,
+        directoryUrl: acmeDirectoryURI(r),
         accountKey: accountKey
     });
     // display more logs
     client.api.setDebug(true);
     // do not validate ACME provider cert
-    client.api.setVerify(false);
+    client.api.setVerify(acmeVerifyProviderHTTPS(r));
 
     try {
         const account = await client.createAccount({
@@ -68,7 +42,7 @@ async function clientNewAccount(r: NginxHTTPRequest) {
  */
 async function clientAutoMode(r: NginxHTTPRequest) {
     const prefix = acmeDir(r);
-    const serverNames = getAcmeServerNames(r);
+    const serverNames = acmeServerNames(r);
 
     const commonName = serverNames[0];
     const pkeyPath = joinPaths(prefix, commonName + KEY_SUFFIX);
@@ -87,8 +61,8 @@ async function clientAutoMode(r: NginxHTTPRequest) {
     let renewCertificate = false;
     let certInfo;
     try {
-        const certData = fs.readFileSync(certPath, 'utf-8');
-        const privateKeyData = fs.readFileSync(pkeyPath, 'utf-8');
+        const certData = fs.readFileSync(certPath, 'utf8');
+        const privateKeyData = fs.readFileSync(pkeyPath, 'utf8');
 
         certInfo = await readCertificateInfo(certData);
         // Calculate the date 30 days before the certificate expiration
@@ -107,14 +81,14 @@ async function clientAutoMode(r: NginxHTTPRequest) {
     }
 
     if (renewCertificate) {
-        const accountKey = await readOrCreateAccountKey(NJS_ACME_ACCOUNT_PRIVATE_JWK);
+        const accountKey = await readOrCreateAccountKey(acmeAccountPrivateJWKPath(r));
         // Create a new ACME client
         let client = new AcmeClient({
-            directoryUrl: DIRECTORY_URL,
+            directoryUrl: acmeDirectoryURI(r),
             accountKey: accountKey
         });
         // client.api.setDebug(true);
-        client.api.setVerify(false);
+        client.api.setVerify(acmeVerifyProviderHTTPS(r));
 
         // Create a new CSR
         const params = {
@@ -127,11 +101,11 @@ async function clientAutoMode(r: NginxHTTPRequest) {
         }
 
         const result = await createCsr(params);
-        fs.writeFileSync(csrPath, toPEM(result.pkcs10Ber, "CERTIFICATE REQUEST"), 'utf-8');
+        fs.writeFileSync(csrPath, toPEM(result.pkcs10Ber, "CERTIFICATE REQUEST"));
 
         const privKey = await crypto.subtle.exportKey("pkcs8", result.keys.privateKey);
         pkeyPem = toPEM(privKey, "PRIVATE KEY");
-        fs.writeFileSync(pkeyPath, pkeyPem, 'utf-8');
+        fs.writeFileSync(pkeyPath, pkeyPem);
         ngx.log(ngx.INFO, `njs-acme: [auto] Wrote Private key to ${pkeyPath}`);
 
         // default challengePath = acmeDir/challenge
@@ -181,22 +155,6 @@ async function clientAutoMode(r: NginxHTTPRequest) {
     return r.return(200, JSON.stringify(info));
 }
 
-async function persistGeneratedKeys(keys: CryptoKeyPair) {
-    crypto.subtle.exportKey("pkcs8", keys.privateKey).then(key => {
-        const pemExported = toPEM(key as ArrayBuffer, "PRIVATE KEY");
-        fs.writeFileSync(joinPaths(NJS_ACME_DIR, "account.private.key"), pemExported);
-    });
-    crypto.subtle.exportKey("spki", keys.publicKey).then(key => {
-        const pemExported = toPEM(key as ArrayBuffer, "PUBLIC KEY");
-        fs.writeFileSync(joinPaths(NJS_ACME_DIR, "account.public.key"), pemExported);
-    });
-    crypto.subtle.exportKey("jwk", keys.privateKey).then(key => {
-        fs.writeFileSync(joinPaths(NJS_ACME_DIR, "account.private.json"), JSON.stringify(key));
-    });
-    crypto.subtle.exportKey("jwk", keys.publicKey).then(key => {
-        fs.writeFileSync(joinPaths(NJS_ACME_DIR, "account.public.json"), JSON.stringify(key));
-    });
-}
 
 /**
  * Demonstrates how to use generate RSA Keys and use HttpClient
@@ -204,17 +162,16 @@ async function persistGeneratedKeys(keys: CryptoKeyPair) {
  * @returns
  */
 async function acmeNewAccount(r: NginxHTTPRequest) {
-    ngx.log(ngx.ERR, `process.env.NJS_ACME_VERIFY_PROVIDER_HTTPS: ${process.env.NJS_ACME_VERIFY_PROVIDER_HTTPS}`);
-    ngx.log(ngx.ERR, `VERIFY_PROVIDER_HTTPS: ${VERIFY_PROVIDER_HTTPS}`);
+    ngx.log(ngx.ERR, `VERIFY_PROVIDER_HTTPS: ${acmeVerifyProviderHTTPS(r)}`);
 
     /* Generate a new RSA key pair for ACME account */
     const keys = (await generateKey()) as Required<CryptoKeyPair>;
 
     // /* Create a new ACME account */
-    let client = new HttpClient(DIRECTORY_URL, keys.privateKey);
+    let client = new HttpClient(acmeDirectoryURI(r), keys.privateKey);
 
     client.setDebug(true);
-    client.setVerify(false);
+    client.setVerify(acmeVerifyProviderHTTPS(r));
 
     // Get Terms Of Service link from the ACME provider
     let tos = await client.getMetaField("termsOfService");
