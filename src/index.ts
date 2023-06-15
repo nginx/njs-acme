@@ -103,7 +103,7 @@ async function clientAutoMode(r: NginxHTTPRequest) {
         const result = await createCsr(params);
         fs.writeFileSync(csrPath, toPEM(result.pkcs10Ber, "CERTIFICATE REQUEST"));
 
-        const privKey = await crypto.subtle.exportKey("pkcs8", result.keys.privateKey);
+        const privKey = await crypto.subtle.exportKey("pkcs8", result.keys.privateKey) as ArrayBuffer;
         pkeyPem = toPEM(privKey, "PRIVATE KEY");
         fs.writeFileSync(pkeyPath, pkeyPem);
         ngx.log(ngx.INFO, `njs-acme: [auto] Wrote Private key to ${pkeyPath}`);
@@ -132,7 +132,7 @@ async function clientAutoMode(r: NginxHTTPRequest) {
                 const path = joinPaths(fullChallengePath, challenge.token);
                 fs.writeFileSync(path, keyAuthorization);
             },
-            challengeRemoveFn: async (authz, challenge, keyAuthorization) => {
+            challengeRemoveFn: async (_authz, challenge, _keyAuthorization) => {
                 const path = joinPaths(fullChallengePath, challenge.token);
                 try {
                     fs.unlinkSync(path);
@@ -207,8 +207,8 @@ async function createCsrHandler(r: NginxHTTPRequest) {
         country: "US",
         organizationUnit: "NGINX"
     });
-    const privkey = await crypto.subtle.exportKey("pkcs8", keys.privateKey);
-    const pubkey = await crypto.subtle.exportKey("spki", keys.publicKey);
+    const privkey = await crypto.subtle.exportKey("pkcs8", keys.privateKey) as ArrayBuffer;
+    const pubkey = await crypto.subtle.exportKey("spki", keys.publicKey) as ArrayBuffer;
     const privkeyPem = toPEM(privkey, "PRIVATE KEY");
     const pubkeyPem = toPEM(pubkey, "PUBLIC KEY");
     const csrPem = toPEM(pkcs10Ber, "CERTIFICATE REQUEST");
