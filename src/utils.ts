@@ -2,11 +2,9 @@ import x509 from './x509.js'
 import * as pkijs from 'pkijs';
 import * as asn1js from 'asn1js';
 import fs from 'fs';
-
-const DEFAULT_ACCOUNT_KEY_PATH = `${ngx.conf_prefix || '/etc/nginx'}/account_private_key.json`;
+import querystring from 'querystring';
 
 // workaround for PKI.JS to work
-const querystring = require('querystring');
 globalThis.unescape = querystring.unescape;
 
 // make PKI.JS to work with webcrypto
@@ -132,7 +130,7 @@ export async function generateKey() {
  * @returns {Promise<CryptoKey>} - The account key as a CryptoKey object.
  * @throws {Error} - If the account key cannot be read or generated.
  */
-export async function readOrCreateAccountKey(path: string = DEFAULT_ACCOUNT_KEY_PATH): Promise<CryptoKey> {
+export async function readOrCreateAccountKey(path: string): Promise<CryptoKey> {
   try {
     const accountKeyJWK = fs.readFileSync(path, 'utf8');
     ngx.log(ngx.INFO, `acme-njs: [utils] Using account key from ${path}`);
@@ -244,6 +242,10 @@ export function encodeTBS(pkcs10: pkijs.CertificationRequest): asn1js.Sequence {
   });
 }
 
+interface AlgoCryptoKey extends CryptoKey {
+  algorithm?: pkijs.CryptoEngineAlgorithmParams | { name: string }
+}
+
 /**
  * Returns signature parameters based on the private key and hash algorithm
  *
@@ -251,7 +253,7 @@ export function encodeTBS(pkcs10: pkijs.CertificationRequest): asn1js.Sequence {
  * @param hashAlgorithm {string} The hash algorithm used for the signature. Default is "SHA-1".
  * @returns {{signatureAlgorithm: pkijs.AlgorithmIdentifier; parameters: pkijs.CryptoEngineAlgorithmParams;}} An object containing signature algorithm and parameters
  */
-function getSignatureParameters(privateKey: CryptoKey, hashAlgorithm = "SHA-1"): {
+function getSignatureParameters(privateKey: AlgoCryptoKey, hashAlgorithm = "SHA-1"): {
   signatureAlgorithm: pkijs.AlgorithmIdentifier; parameters: pkijs.CryptoEngineAlgorithmParams;
 } {
   // Check hashing algorithm
@@ -369,6 +371,7 @@ export async function createCsr(params: {
 }): Promise<{ pkcs10Ber: ArrayBuffer; keys: Required<CryptoKeyPair> }> {
   // TODO:  allow to provide keys in addition to always generating one
   const { privateKey, publicKey } = (await generateKey()) as Required<CryptoKeyPair>;
+  const algoPrivateKey = privateKey as AlgoCryptoKey;
 
   const pkcs10 = new pkijs.CertificationRequest();
   pkcs10.version = 0;
@@ -377,7 +380,7 @@ export async function createCsr(params: {
   await addExtensions(pkcs10, params, publicKey);
 
   // FIXME: workaround for PKIS.js
-  privateKey.algorithm = pkijs.getAlgorithmParameters("RSASSA-PKCS1-v1_5", "sign")
+  algoPrivateKey.algorithm = pkijs.getAlgorithmParameters("RSASSA-PKCS1-v1_5", "sign")
   await signCsr(pkcs10, privateKey);
 
   const pkcs10Ber = getPkcs10Ber(pkcs10);
@@ -458,7 +461,7 @@ function getAltNames(params: {
 }
 
 function createGeneralName(
-  type: number,
+  type: 0 | 2 | 1 | 6 | 3 | 4 | 7 | 8 | undefined,
   value: string
 ): pkijs.GeneralName {
   return new pkijs.GeneralName({ type, value });
@@ -468,7 +471,7 @@ async function addExtensions(
   pkcs10: pkijs.CertificationRequest,
   params: { commonName?: string; altNames?: string[]; },
   publicKey: CryptoKey
-): void {
+) {
 
   const altNames = getAltNames(params);
 
@@ -500,13 +503,13 @@ function createExtension(
   });
 }
 
-async function getSubjectKeyIdentifier(pkcs10: pkijs.CertificationRequest): asn1js.OctetString {
+async function getSubjectKeyIdentifier(pkcs10: pkijs.CertificationRequest): Promise<asn1js.OctetString> {
   const subjectPublicKeyValue = pkcs10.subjectPublicKeyInfo.subjectPublicKey.valueBlock.valueHex
   const subjectKeyIdentifier = await crypto.subtle.digest("SHA-256", subjectPublicKeyValue);
   return new asn1js.OctetString({ valueHex: subjectKeyIdentifier });
 }
 
-async function signCsr(pkcs10: pkijs.CertificationRequest, privateKey: CryptoKey): Promise<void> {
+async function signCsr(pkcs10: pkijs.CertificationRequest, privateKey: AlgoCryptoKey): Promise<void> {
   /* Set signatureValue  */
   pkcs10.tbsView = new Uint8Array(encodeTBS(pkcs10).toBER());
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", privateKey, pkcs10.tbsView);
@@ -564,6 +567,10 @@ export function formatResponseError(data: any) {
  * @param {number} [opts.max] Maximum backoff duration in ms
  */
 class Backoff {
+  min: number
+  max: number
+  attempts: number
+
   constructor({ min = 100, max = 10000 } = {}) {
     this.min = min;
     this.max = max;
@@ -593,7 +600,7 @@ class Backoff {
  * @param {Backoff} backoff Backoff instance
  * @returns {Promise}
  */
-async function retryPromise(fn, attempts, backoff) {
+async function retryPromise(fn: Function, attempts: number, backoff: Backoff): Promise<any> {
   let aborted = false;
 
   try {
@@ -606,9 +613,9 @@ async function retryPromise(fn, attempts, backoff) {
     }
 
     const duration = backoff.duration();
-    ngx.log(ngx.INFO, `acme-js: [utils] Promise rejected attempt #${backoff.attempts}, retrying in ${duration}ms: ${e.message}`);
+    ngx.log(ngx.INFO, `acme-js: [utils] Promise rejected attempt #${backoff.attempts}, retrying in ${duration}ms: ${e}`);
 
-    await new Promise((resolve) => { setTimeout(resolve, duration); });
+    await new Promise((resolve) => { setTimeout(resolve, duration, {}); });
     return retryPromise(fn, attempts, backoff);
   }
 }
@@ -624,7 +631,7 @@ async function retryPromise(fn, attempts, backoff) {
  * @param {number} [backoffOpts.max] Maximum attempt delay in milliseconds, default: `30000`
  * @returns {Promise}
  */
-export function retry(fn, { attempts = 5, min = 5000, max = 30000 } = {}) {
+export function retry(fn: Function, { attempts = 5, min = 5000, max = 30000 } = {}) {
   const backoff = new Backoff({ min, max });
   return retryPromise(fn, attempts, backoff);
 }
@@ -709,7 +716,7 @@ export function splitPemChain(chainPem: Buffer | string) {
     .map((pem) => pem.match(/\s*-----BEGIN ([A-Z0-9- ]+)-----\r?\n?([\S\s]+)\r?\n?-----END \1-----/))
     /* Filter out non-matches or empty bodies */
     .filter((pem) => pem && pem[2] && pem[2].replace(/[\r\n]+/g, '').trim())
-    .map(([pem, _]) => pem);
+    .map((arr) => arr && arr[0]);
 }
 
 
@@ -778,7 +785,7 @@ export function acmeDir(r: NginxHTTPRequest) {
  * @param r {NginxHTTPRequest}
  */
 export function acmeAccountPrivateJWKPath(r: NginxHTTPRequest) {
-  return getVariable(r, 'njs_acme_account_private_jwk', 
+  return getVariable(r, 'njs_acme_account_private_jwk',
     joinPaths(acmeDir(r), 'account_private_key.json')
   );
 }
@@ -801,7 +808,7 @@ export function acmeDirectoryURI(r: NginxHTTPRequest) {
 export function acmeVerifyProviderHTTPS(r: NginxHTTPRequest) {
   return ['true', 'yes', '1'].indexOf(
     getVariable(r, 'njs_acme_verify_provider_https', 'true').toLowerCase().trim()
-    ) > -1;
+  ) > -1;
 }
 
 
