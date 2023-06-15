@@ -158,7 +158,9 @@ export async function readOrCreateAccountKey(path: string = DEFAULT_ACCOUNT_KEY_
  */
 export async function getPublicJwk(privateKey: CryptoKey): Promise<RsaPublicJwk | EcdsaPublicJwk> {
   if (!privateKey) {
-    throw new Error('Invalid or missing private key');
+    const errMsg = 'Invalid or missing private key';
+    ngx.log(ngx.ERR, errMsg);
+    throw new Error(errMsg);
   }
 
   const jwk: any = await crypto.subtle.exportKey("jwk", privateKey);
@@ -265,7 +267,9 @@ function getSignatureParameters(privateKey: CryptoKey, hashAlgorithm = "SHA-1"):
   //#region Get a "default parameters" for current algorithm
   const parameters = pkijs.getAlgorithmParameters(privateKey.algorithm.name, "sign");
   if (!Object.keys(parameters.algorithm).length) {
-    throw new Error("Parameter 'algorithm' is empty");
+    const errMsg = 'Parameter `algorithm` is empty';
+    ngx.log(ngx.ERR, errMsg);
+    throw new Error(errMsg);
   }
   const algorithm = parameters.algorithm as any; // TODO remove `as any`
   algorithm.hash.name = hashAlgorithm;
@@ -324,7 +328,9 @@ function getSignatureParameters(privateKey: CryptoKey, hashAlgorithm = "SHA-1"):
       }
       break;
     default:
-      throw new Error(`Unsupported signature algorithm: ${privateKey.algorithm.name}`);
+      const errMsg = `Unsupported signature algorithm: ${privateKey.algorithm.name}`;
+      ngx.log(ngx.ERR, errMsg)
+      throw new Error(errMsg);
   }
   //#endregion
 
@@ -737,7 +743,9 @@ export function readCsrDomainNames(csrPem: string | Buffer): { commonName: strin
 export function getVariable(r: NginxHTTPRequest, varname: string, defaultVal?: string) {
   const retval = process.env[varname.toUpperCase()] || r.variables[varname] || defaultVal
   if (retval === undefined) {
-    throw new Error(`Variable ${varname} not found and no default value given.`)
+    const errMsg = `Variable ${varname} not found and no default value given.`;
+    ngx.log(ngx.ERR, errMsg);
+    throw new Error(errMsg);
   }
   return retval
 }
@@ -748,7 +756,7 @@ export function getVariable(r: NginxHTTPRequest, varname: string, defaultVal?: s
  * @param r request
  * @returns array of hostnames
  */
-export function getAcmeServerNames(r: NginxHTTPRequest) {
+export function acmeServerNames(r: NginxHTTPRequest) {
   const nameStr = getVariable(r, 'njs_acme_server_names') // no default == mandatory
   // split string value on comma and/or whitespace and lowercase each element
   return nameStr.split(/[,\s]+/).map((n) => n.toLocaleLowerCase())
@@ -762,6 +770,38 @@ export function getAcmeServerNames(r: NginxHTTPRequest) {
  */
 export function acmeDir(r: NginxHTTPRequest) {
   return getVariable(r, 'njs_acme_dir', '/etc/acme');
+}
+
+
+/**
+ * Returns the path for the account private JWK
+ * @param r {NginxHTTPRequest}
+ */
+export function acmeAccountPrivateJWKPath(r: NginxHTTPRequest) {
+  return getVariable(r, 'njs_acme_account_private_jwk', 
+    joinPaths(acmeDir(r), 'account_private_key.json')
+  );
+}
+
+
+/**
+ * Returns the ACME directory URI
+ * @param r {NginxHTTPRequest}
+ */
+export function acmeDirectoryURI(r: NginxHTTPRequest) {
+  return getVariable(r, 'njs_acme_directory_uri', 'https://acme-staging-v02.api.letsencrypt.org/directory');
+}
+
+
+/**
+ * Returns whether to verify the ACME provider HTTPS certificate and chain
+ * @param r {NginxHTTPRequest}
+ * @returns boolean
+ */
+export function acmeVerifyProviderHTTPS(r: NginxHTTPRequest) {
+  return ['true', 'yes', '1'].indexOf(
+    getVariable(r, 'njs_acme_verify_provider_https', 'true').toLowerCase().trim()
+    ) > -1;
 }
 
 
