@@ -3,7 +3,6 @@ import * as pkijs from 'pkijs'
 import * as asn1js from 'asn1js'
 import fs from 'fs'
 import querystring from 'querystring'
-import { SignedPayload } from './api.js'
 import { ClientExternalAccountBindingOptions } from './client.js'
 
 // workaround for PKI.JS to work
