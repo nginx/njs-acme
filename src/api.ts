@@ -5,7 +5,13 @@ import {
   EcdsaPublicJwk,
 } from './utils'
 import { version } from '../package.json'
-import { ClientExternalAccountBindingOptions } from './client'
+import {
+  AccountCreateRequest,
+  AccountUpdateRequest,
+  ClientExternalAccountBindingOptions,
+  OrderCreateRequest,
+} from './client'
+import crypto from 'crypto'
 
 export type AcmeMethod = 'GET' | 'HEAD' | 'POST' | 'POST-as-GET'
 export type AcmeResource =
@@ -18,13 +24,22 @@ export type AcmeResource =
   | 'renewalInfo'
 export type AcmeSignAlgo = 'RS256' | 'ES256' | 'ES512' | 'ES384'
 
-/* */
-
 export interface SignedPayload {
   payload: string
   protected: string
   signature?: string
+  externalAccountBinding?: ClientExternalAccountBindingOptions
 }
+
+type ApiPayload =
+  | Record<string, unknown>
+  | AccountCreateRequest
+  | OrderCreateRequest
+  | SignedPayload
+  | RsaPublicJwk
+  | EcdsaPublicJwk
+  | null
+  | undefined
 
 export type UpdateAuthorizationData = {
   status: string
@@ -234,13 +249,13 @@ export class HttpClient {
    * @param {string} url HTTP URL
    * @param {string} method HTTP method
    * @param {object} [body] Request options
-   * @returns {Promise<object>} HTTP response
+   * @returns {Promise<Response>} HTTP response
    */
   async request(
     url: NjsStringLike,
     method: AcmeMethod,
     body: NjsStringLike = ''
-  ) {
+  ): Promise<Response> {
     const options: NgxFetchOptions = {
       headers: {
         'user-agent': `njs-acme-v${version}`,
@@ -264,7 +279,8 @@ export class HttpClient {
     if (this.debug) {
       ngx.log(
         ngx.INFO,
-        `njs-acme: [http] Got a response: ${resp.status
+        `njs-acme: [http] Got a response: ${
+          resp.status
         } ${method} ${url} ${JSON.stringify(resp.headers)}`
       )
     }
@@ -287,12 +303,16 @@ export class HttpClient {
    */
   async signedRequest(
     url: string,
-    payload: object,
-    { kid = null, nonce = null, includeExternalAccountBinding = false } = {},
+    payload: ApiPayload,
+    {
+      kid = null as string | null,
+      nonce = null as NjsByteString | null,
+      includeExternalAccountBinding = false,
+    } = {},
     attempts = 0
   ): Promise<Response> {
     if (!nonce) {
-      nonce = await this.getNonce()
+      nonce = (await this.getNonce()) as NjsByteString
     }
     if (!this.jwk) {
       await this.getJwk()
@@ -319,13 +339,16 @@ export class HttpClient {
         const jwk = this.jwk
         const eabKid = this.externalAccountBinding.kid
         const eabHmacKey = this.externalAccountBinding.hmacKey
-          // FIXME
-          ; (payload as any).externalAccountBinding = this.createSignedHmacBody(
+
+        // FIXME
+        if (payload) {
+          payload.externalAccountBinding = this.createSignedHmacBody(
             eabHmacKey,
             url,
             jwk,
             { kid: eabKid }
           )
+        }
       }
     }
 
@@ -342,7 +365,7 @@ export class HttpClient {
     if (resp.status === 400) {
       // FIXME: potential issue here as we reading the response body
       // TODO: refactor maybe
-      const respData = await resp.json()
+      const respData = (await resp.json()) as Record<string, unknown>
       /* Retry on bad nonce - https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-6.4 */
       if (
         respData?.type === 'urn:ietf:params:acme:error:badNonce' &&
@@ -382,10 +405,10 @@ export class HttpClient {
    */
   async apiRequest(
     url: string,
-    payload: any = null,
+    payload: ApiPayload = null,
     validStatusCodes: number[] = [],
     { includeJwsKid = true, includeExternalAccountBinding = false } = {}
-  ) {
+  ): Promise<Response> {
     const kid = includeJwsKid ? this.getAccountUrl() : null
     if (this.debug) {
       ngx.log(
@@ -407,7 +430,8 @@ export class HttpClient {
       const b = await resp.json()
       ngx.log(
         ngx.WARN,
-        `njs-acme: [http] Received unexpected status code ${resp.status
+        `njs-acme: [http] Received unexpected status code ${
+          resp.status
         } for API request ${url}. Expected status codes: ${validStatusCodes.join(
           ', '
         )}. Body response: ${JSON.stringify(b)}`
@@ -432,10 +456,10 @@ export class HttpClient {
    */
   async apiResourceRequest(
     resource: AcmeResource,
-    payload: any = null,
+    payload: ApiPayload,
     validStatusCodes: number[] = [],
     { includeJwsKid = true, includeExternalAccountBinding = false } = {}
-  ) {
+  ): Promise<Response> {
     const resourceUrl = await this.getResourceUrl(resource)
     return this.apiRequest(resourceUrl, payload, validStatusCodes, {
       includeJwsKid,
@@ -447,9 +471,9 @@ export class HttpClient {
    * Retrieves the ACME directory from the directory URL specified in the constructor.
    *
    * @throws {Error} Throws an error if the response status code is not 200 OK or the response body is invalid.
-   * @returns {Promise<AcmeDirectory>} Returns a Promise that resolves to an object representing the ACME directory.
+   * @returns {Promise<void>} Updates internal `this.directory` and returns a promise
    */
-  async getDirectory() {
+  async getDirectory(): Promise<void> {
     if (!this.directory) {
       const resp = await this.request(this.directoryUrl, 'GET')
 
@@ -458,11 +482,11 @@ export class HttpClient {
           `Attempting to read ACME directory returned error ${resp.status}: ${this.directoryUrl}`
         )
       }
-      const data = await resp.json()
+      const data = (await resp.json()) as AcmeDirectory
       if (!data) {
         throw new Error('Attempting to read ACME directory returned no data')
       }
-      this.directory = <AcmeDirectory>data
+      this.directory = data
       if (this.debug) {
         ngx.log(
           ngx.INFO,
@@ -482,7 +506,7 @@ export class HttpClient {
    * @returns {Promise<RsaPublicJwk|EcdsaPublicJwk|null>} The public key associated with the account key, or null if not found
    * @throws {Error} If the account key is not set or is not valid
    */
-  async getJwk() {
+  async getJwk(): Promise<RsaPublicJwk | EcdsaPublicJwk> {
     // singleton
     if (!this.jwk) {
       if (this.debug) {
@@ -511,7 +535,7 @@ export class HttpClient {
    *
    * @returns {Promise<string>} nonce
    */
-  async getNonce() {
+  async getNonce(): Promise<string> {
     const url = await this.getResourceUrl('newNonce')
     const resp = await this.request(url, 'HEAD')
     if (!resp.headers.get('replay-nonce')) {
@@ -542,25 +566,31 @@ export class HttpClient {
         `Unable to locate API resource URL in ACME directory: "${resource}"`
       )
     }
-    return this.directory![resource] as string
+    if (!this.directory) {
+      throw new Error('this.directory is null')
+    }
+    return this.directory[resource] as string
   }
 
   /**
    * Get directory meta field
    *
    * @param {string} field Meta field name
-   * @returns {Promise<string|null>} Meta field value
+   * @returns {Promise<string | boolean | string[] | undefined>} Meta field value
    */
-  async getMetaField(field: string): Promise<string | undefined> {
+  async getMetaField(
+    field:
+      | 'termsOfService'
+      | 'website'
+      | 'caaIdentities'
+      | 'externalAccountRequired'
+      | 'endpoints'
+  ): Promise<string | boolean | string[] | undefined> {
     await this.getDirectory()
-    if (
-      this.directory &&
-      'meta' in this.directory &&
-      field in this.directory.meta
-    ) {
-      return this.directory.meta[field]
+    if (!this.directory) {
+      throw new Error('this.directory is null')
     }
-    return
+    return this.directory?.meta?.[field]
   }
 
   /**
@@ -577,11 +607,11 @@ export class HttpClient {
   prepareSignedBody(
     alg: AcmeSignAlgo | string,
     url: NjsStringLike,
-    payload = null,
+    payload: ApiPayload = null,
     jwk: RsaPublicJwk | EcdsaPublicJwk | null | undefined,
-    { nonce = null, kid = null } = {}
+    { nonce = null as string | null, kid = null as string | null } = {}
   ): SignedPayload {
-    const header: any = { alg, url }
+    const header: Record<string, unknown> = { alg, url }
 
     /* Nonce */
     if (nonce) {
@@ -620,17 +650,17 @@ export class HttpClient {
   async createSignedHmacBody(
     hmacKey: string,
     url: string,
-    payload = null,
-    { nonce = null, kid = null } = {}
-  ) {
+    payload: ApiPayload = null,
+    { nonce = null as string | null, kid = null as string | null } = {}
+  ): Promise<SignedPayload> {
     if (!hmacKey) {
       throw new Error('HMAC key is required.')
     }
-    const result = this.prepareSignedBody('HS256', url, payload, { nonce, kid })
-    const h = require('crypto').createHmac(
-      'sha256',
-      Buffer.from(hmacKey, 'base64')
-    )
+    const result = this.prepareSignedBody('HS256', url, payload, null, {
+      nonce,
+      kid,
+    })
+    const h = crypto.createHmac('sha256', Buffer.from(hmacKey, 'base64'))
     h.update(`${result.protected}.${result.payload}`)
     result.signature = h.digest('base64url')
     return result
@@ -650,22 +680,25 @@ export class HttpClient {
    */
   async createSignedBody(
     url: NjsStringLike,
-    payload: any = null,
-    { nonce = null, kid = null } = {}
+    payload: ApiPayload = null,
+    { nonce = null as string | null, kid = null as string | null } = {}
   ): Promise<SignedPayload> {
-    const jwk = this.jwk!
+    const jwk = this.jwk
     let headerAlg: AcmeSignAlgo = 'RS256'
-    let signerAlg = 'SHA256'
+    let signerAlg = 'SHA-256'
 
+    if (!jwk) {
+      throw new Error('jwk is undefined')
+    }
     /* https://datatracker.ietf.org/doc/html/rfc7518#section-3.1 */
     if ('crv' in jwk && jwk.crv && jwk.kty === 'EC') {
       headerAlg = 'ES256'
       if (jwk.crv === 'P-384') {
         headerAlg = 'ES384'
-        signerAlg = 'SHA384'
+        signerAlg = 'SHA-384'
       } else if (jwk.crv === 'P-521') {
         headerAlg = 'ES512'
-        signerAlg = 'SHA512'
+        signerAlg = 'SHA-512'
       }
     }
 
@@ -682,22 +715,27 @@ export class HttpClient {
       )
     }
 
+    // njs-types/crypto.d.ts does not contain a `subtle` propery on the crypto object
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    const subtle = crypto.subtle as SubtleCrypto
+
     let sign
     if (jwk.kty === 'EC') {
-      const hash = await crypto.subtle.digest(
-        { name: signerAlg },
+      const hash = await subtle.digest(
+        signerAlg as HashVariants,
         `${result.protected}.${result.payload}`
       )
-      sign = await crypto.subtle.sign(
+      sign = await subtle.sign(
         {
           name: 'ECDSA',
-          hash: hash,
+          hash: hash.toString() as HashVariants,
         },
         this.accountKey,
         hash
       )
     } else {
-      sign = await crypto.subtle.sign(
+      sign = await subtle.sign(
         { name: 'RSASSA-PKCS1-v1_5' },
         this.accountKey,
         `${result.protected}.${result.payload}`
@@ -730,7 +768,7 @@ export class HttpClient {
    * @returns {Promise<string|null>} ToS URL
    */
   async getTermsOfServiceUrl(): Promise<string | undefined> {
-    return this.getMetaField('termsOfService')
+    return this.getMetaField('termsOfService') as Promise<string>
   }
 
   /**
@@ -744,7 +782,7 @@ export class HttpClient {
    * @param {boolean} data.onlyReturnExisting Whether the server should only return an existing account, or create a new one if it does not exist.
    * @returns {Promise<object>} HTTP response.
    */
-  async createAccount(data: object): Promise<Response> {
+  async createAccount(data: AccountCreateRequest): Promise<Response> {
     const resp = await this.apiResourceRequest('newAccount', data, [200, 201], {
       includeJwsKid: false,
       includeExternalAccountBinding: data.onlyReturnExisting !== true,
@@ -766,7 +804,7 @@ export class HttpClient {
    * @param {object} data Request payload
    * @returns {Promise<object>} HTTP response
    */
-  updateAccount(data: object): Promise<Response> {
+  updateAccount(data: AccountUpdateRequest): Promise<Response> {
     return this.apiRequest(this.getAccountUrl(), data, [200, 202])
   }
 
@@ -775,10 +813,10 @@ export class HttpClient {
    *
    * https://tools.ietf.org/html/rfc8555#section-7.3.5
    *
-   * @param {object} data Request payload
+   * @param {ApiPayload} data Request payload
    * @returns {Promise<object>} HTTP response
    */
-  updateAccountKey(data: object): Promise<Response> {
+  updateAccountKey(data: ApiPayload): Promise<Response> {
     return this.apiResourceRequest('keyChange', data, [200])
   }
 
@@ -787,10 +825,10 @@ export class HttpClient {
    *
    * https://tools.ietf.org/html/rfc8555#section-7.4
    *
-   * @param {object} data Request payload
+   * @param {ApiPayload} data Request payload
    * @returns {Promise<object>} HTTP response
    */
-  createOrder(data: object): Promise<Response> {
+  createOrder(data: ApiPayload): Promise<Response> {
     return this.apiResourceRequest('newOrder', data, [201])
   }
 
@@ -812,10 +850,10 @@ export class HttpClient {
    * https://tools.ietf.org/html/rfc8555#section-7.4
    *
    * @param {string} url Finalization URL
-   * @param {object} data Request payload
+   * @param {ApiPayload} data Request payload
    * @returns {Promise<object>} HTTP response
    */
-  finalizeOrder(url: string, data: object): Promise<Response> {
+  finalizeOrder(url: string, data: ApiPayload): Promise<Response> {
     return this.apiRequest(url, data, [200])
   }
 
@@ -853,10 +891,10 @@ export class HttpClient {
    * https://tools.ietf.org/html/rfc8555#section-7.5.1
    *
    * @param {string} url Challenge URL
-   * @param {object} data Request payload
+   * @param {ApiPayload} data Request payload
    * @returns {Promise<object>} HTTP response
    */
-  completeChallenge(url: string, data: object): Promise<Response> {
+  completeChallenge(url: string, data: ApiPayload): Promise<Response> {
     return this.apiRequest(url, data, [200])
   }
 
@@ -866,13 +904,13 @@ export class HttpClient {
    * https://tools.ietf.org/html/rfc8555#section-7.6
    *
    *
-   * @param {object} data - An object containing the data needed for revocation:
+   * @param {ApiPayload} data - An object containing the data needed for revocation:
    * @param {string} data.certificate - The certificate to be revoked.
    * @param {number} data.reason - An optional reason for revocation (default: 1).
    *                               See this https://datatracker.ietf.org/doc/html/rfc5280#section-5.3.1
    * @returns {Promise<object>} HTTP response
    */
-  revokeCert(data: object): Promise<Response> {
+  revokeCert(data: ApiPayload): Promise<Response> {
     return this.apiResourceRequest('revokeCert', data, [200])
   }
 
@@ -881,7 +919,7 @@ export class HttpClient {
    *
    * @param {boolean} v - The value to set `verify` to.
    */
-  setVerify(v: boolean) {
+  setVerify(v: boolean): void {
     this.verify = v
   }
 

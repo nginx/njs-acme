@@ -1,5 +1,6 @@
 import { HttpClient } from './api'
 import { formatResponseError, getPemBodyAsB64u, retry } from './utils'
+import crypto from 'crypto'
 
 export interface ClientExternalAccountBindingOptions {
   kid: string
@@ -29,15 +30,12 @@ export interface AccountCreateRequest {
   externalAccountBinding?: ClientExternalAccountBindingOptions
 }
 
-export interface AccountUpdateRequest {
+export type AccountUpdateRequest = {
   status?: string
   contact?: string[]
   termsOfServiceAgreed?: boolean
-}
-
-interface AuthorizationResponseData {
-  url?: string
-}
+  externalAccountBinding?: ClientExternalAccountBindingOptions
+} | null
 
 /**
  * Order
@@ -53,14 +51,16 @@ export interface Order {
   expires?: string
   notBefore?: string
   notAfter?: string
-  error?: object
+  error?: Record<string, unknown>
   certificate?: string
+  url?: string
 }
 
 export interface OrderCreateRequest {
   identifiers: Identifier[]
   notBefore?: string
   notAfter?: string
+  externalAccountBinding?: ClientExternalAccountBindingOptions
 }
 
 /**
@@ -71,15 +71,16 @@ export interface OrderCreateRequest {
 export interface Authorization {
   identifier: Identifier
   status:
-  | 'pending'
-  | 'valid'
-  | 'invalid'
-  | 'deactivated'
-  | 'expired'
-  | 'revoked'
+    | 'pending'
+    | 'valid'
+    | 'invalid'
+    | 'deactivated'
+    | 'expired'
+    | 'revoked'
   challenges: Challenge[]
   expires?: string
   wildcard?: boolean
+  url?: string
 }
 
 export interface Identifier {
@@ -99,7 +100,7 @@ export interface ChallengeAbstract {
   url: string
   status: 'pending' | 'processing' | 'valid' | 'invalid'
   validated?: string
-  error?: object
+  error?: Record<string, unknown>
 }
 
 export interface HttpChallenge extends ChallengeAbstract {
@@ -112,7 +113,12 @@ export interface DnsChallenge extends ChallengeAbstract {
   token: string
 }
 
-export type Challenge = HttpChallenge | DnsChallenge
+export interface TlsAlpnChallenge extends ChallengeAbstract {
+  type: 'tls-alpn-01'
+  token: string
+}
+
+export type Challenge = HttpChallenge | DnsChallenge | TlsAlpnChallenge
 
 /**
  * Certificate
@@ -152,12 +158,12 @@ export interface ClientAutoOptions {
     authz: Authorization,
     challenge: Challenge,
     keyAuthorization: string
-  ) => Promise<any>
+  ) => Promise<void>
   challengeRemoveFn: (
     authz: Authorization,
     challenge: Challenge,
     keyAuthorization: string
-  ) => Promise<any>
+  ) => Promise<void>
   email?: string
   termsOfServiceAgreed?: boolean
   challengePriority?: string[]
@@ -280,7 +286,7 @@ export class AcmeClient {
    * }
    * ```
    */
-  getTermsOfServiceUrl() {
+  async getTermsOfServiceUrl(): Promise<string | undefined> {
     return this.api.getTermsOfServiceUrl()
   }
 
@@ -331,7 +337,7 @@ export class AcmeClient {
     data: AccountCreateRequest = {
       termsOfServiceAgreed: false,
     }
-  ): Promise<object> {
+  ): Promise<Record<string, unknown>> {
     try {
       this.getAccountUrl()
 
@@ -349,7 +355,7 @@ export class AcmeClient {
         )
         return await this.updateAccount(data)
       }
-      return await resp.json()
+      return (await resp.json()) as Promise<Record<string, unknown>>
     }
   }
 
@@ -368,25 +374,27 @@ export class AcmeClient {
    * });
    * ```
    */
-  async updateAccount(data: AccountUpdateRequest = {}) {
+  async updateAccount(
+    data: AccountUpdateRequest = {}
+  ): Promise<Record<string, unknown>> {
     try {
       this.api.getAccountUrl()
     } catch (e) {
-      return this.createAccount(data)
+      return this.createAccount(data || undefined)
     }
 
     /* Remove data only applicable to createAccount() */
-    if ('onlyReturnExisting' in data) {
+    if (data && 'onlyReturnExisting' in data) {
       delete data.onlyReturnExisting
     }
 
     /* POST-as-GET */
-    if (Object.keys(data).length === 0) {
+    if (data && Object.keys(data).length === 0) {
       data = null
     }
 
     const resp = await this.api.updateAccount(data)
-    return await resp.json()
+    return (await resp.json()) as Promise<Record<string, unknown>>
   }
 
   /**
@@ -406,8 +414,8 @@ export class AcmeClient {
    */
   async updateAccountKey(
     newAccountKey: CryptoKey | string | Buffer,
-    data = {}
-  ) {
+    data: Record<string, unknown> = {}
+  ): Promise<Record<string, unknown>> {
     // FIXME: if string | Buffer then handle reading from PEM
 
     if (Buffer.isBuffer(newAccountKey) || typeof newAccountKey === 'string') {
@@ -416,8 +424,7 @@ export class AcmeClient {
 
     const accountUrl = this.api.getAccountUrl()
 
-    // FIXME
-    const newCryptoKey = null
+    const newCryptoKey = '' // TODO FIX THIS
 
     /* Create new HTTP and API clients using new key */
     const newHttpClient = new HttpClient(
@@ -432,7 +439,7 @@ export class AcmeClient {
 
     /* Get signed request body from new client */
     const url = await newHttpClient.getResourceUrl('keyChange')
-    const body = newHttpClient.createSignedBody(url, data)
+    const body = await newHttpClient.createSignedBody(url, data)
 
     /* Change key using old client */
     const resp = await this.api.updateAccountKey(body)
@@ -441,7 +448,7 @@ export class AcmeClient {
     this.api = newHttpClient
 
     // FIXME
-    return await resp.json()
+    return (await resp.json()) as Record<string, unknown>
   }
 
   /**
@@ -462,7 +469,7 @@ export class AcmeClient {
    * });
    * ```
    */
-  async createOrder(data: OrderCreateRequest) {
+  async createOrder(data: OrderCreateRequest): Promise<Order> {
     const resp = await this.api.createOrder(data)
 
     if (!resp.headers.get('location')) {
@@ -471,7 +478,7 @@ export class AcmeClient {
 
     // FIXME
     /* Add URL to response */
-    const respData = await resp.json()
+    const respData = (await resp.json()) as Order
     respData.url = resp.headers.get('location')
     return respData
   }
@@ -490,7 +497,7 @@ export class AcmeClient {
    * const result = await client.getOrder(order);
    * ```
    */
-  async getOrder(order: Order) {
+  async getOrder(order: Order): Promise<Record<string, unknown>> {
     if (!order.url) {
       throw new Error('Unable to get order, URL not found')
     }
@@ -498,7 +505,7 @@ export class AcmeClient {
     const resp = await this.api.getOrder(order.url)
 
     /* Add URL to response */
-    const respData = await resp.json()
+    const respData = (await resp.json()) as Record<string, unknown>
     respData.url = order.url
     return respData
   }
@@ -519,7 +526,10 @@ export class AcmeClient {
    * const result = await client.finalizeOrder(order, csr);
    * ```
    */
-  async finalizeOrder(order: Order, csr: Buffer | string) {
+  async finalizeOrder(
+    order: Order,
+    csr: Buffer | string
+  ): Promise<Record<string, unknown>> {
     if (!order.finalize) {
       throw new Error('Unable to finalize order, URL not found')
     }
@@ -529,7 +539,7 @@ export class AcmeClient {
     }
 
     // FIXME
-    const data = { csr: getPemBodyAsB64u(csr) }
+    const data = { csr: getPemBodyAsB64u(csr.toString()) }
     let resp
     try {
       resp = await this.api.finalizeOrder(order.finalize, data)
@@ -538,7 +548,7 @@ export class AcmeClient {
       throw e
     }
     /* Add URL to response */
-    const respData = await resp.json()
+    const respData = (await resp.json()) as Record<string, unknown>
     respData.url = order.url
     return respData
   }
@@ -561,11 +571,11 @@ export class AcmeClient {
    * });
    * ```
    */
-  async getAuthorizations(order: Order): Promise<unknown> {
+  async getAuthorizations(order: Order): Promise<Authorization[]> {
     return Promise.all(
       (order.authorizations || []).map(async (url) => {
         const resp = await this.api.getAuthorization(url)
-        const respData = (await resp.json()) as AuthorizationResponseData
+        const respData = (await resp.json()) as Authorization
         /* Add URL to response */
         respData.url = url
         return respData
@@ -587,7 +597,9 @@ export class AcmeClient {
    * const result = await client.deactivateAuthorization(authz);
    * ```
    */
-  async deactivateAuthorization(authz) {
+  async deactivateAuthorization(
+    authz: Authorization
+  ): Promise<Record<string, unknown>> {
     if (!authz.url) {
       throw new Error(
         'Unable to deactivate identifier authorization, URL not found'
@@ -598,10 +610,10 @@ export class AcmeClient {
       status: 'deactivated',
     }
 
-    const resp = await this.api.updateAuthorization(authz.url, data)
+    const resp = await this.api.updateAuthorization(authz.url as string, data)
 
     /* Add URL to response */
-    const respData = await resp.json()
+    const respData = (await resp.json()) as Record<string, unknown>
     respData.url = authz.url
     return respData
   }
@@ -622,12 +634,10 @@ export class AcmeClient {
    * // Write key somewhere to satisfy challenge
    * ```
    */
-  async getChallengeKeyAuthorization(challenge) {
+  async getChallengeKeyAuthorization(challenge: Challenge): Promise<string> {
     const jwk = await this.api.getJwk()
 
-    const keysum = require('crypto')
-      .createHash('sha256')
-      .update(JSON.stringify(jwk))
+    const keysum = crypto.createHash('sha256').update(JSON.stringify(jwk))
     const thumbprint = keysum.digest('base64url')
     const result = `${challenge.token}.${thumbprint}`
 
@@ -647,7 +657,7 @@ export class AcmeClient {
     }
 
     throw new Error(
-      `Unable to produce key authorization, unknown challenge type: ${challenge.type}`
+      `Unable to produce key authorization, unknown challenge type: ${challenge}`
     )
   }
 
@@ -665,9 +675,11 @@ export class AcmeClient {
    * const result = await client.completeChallenge(challenge);
    * ```
    */
-  async completeChallenge(challenge) {
-    const resp = await this.api.completeChallenge(challenge.url, {})
-    return await resp.json()
+  async completeChallenge(
+    challenge: Challenge
+  ): Promise<Record<string, unknown>> {
+    const resp = await this.api.completeChallenge(challenge.url as string, {})
+    return (await resp.json()) as Record<string, unknown>
   }
 
   /**
@@ -696,16 +708,18 @@ export class AcmeClient {
    * await client.waitForValidStatus(order);
    * ```
    */
-  async waitForValidStatus(item) {
+  async waitForValidStatus(
+    item: Record<string, unknown> | Challenge
+  ): Promise<Record<string, unknown>> {
     if (!item.url) {
       throw new Error('Unable to verify status of item, URL not found')
     }
 
-    const verifyFn = async (abort) => {
-      const resp = await this.api.apiRequest(item.url, null, [200])
+    const verifyFn = async (abort: () => void) => {
+      const resp = await this.api.apiRequest(item.url as string, null, [200])
 
       /* Verify status */
-      const respData = await resp.json()
+      const respData = (await resp.json()) as Record<string, string>
       ngx.log(
         ngx.INFO,
         `njs-acme: [client] Item has status: ${respData.status}`
@@ -727,7 +741,7 @@ export class AcmeClient {
       ngx.INFO,
       `njs-acme: [client] Waiting for valid status from: ${item.url} ${this.backoffOpts}`
     )
-    return retry(verifyFn, this.backoffOpts)
+    return retry(verifyFn, this.backoffOpts) as Promise<Record<string, unknown>>
   }
 
   /**
@@ -751,8 +765,11 @@ export class AcmeClient {
    * const certificate = await client.getCertificate(order, 'DST Root CA X3');
    * ```
    */
-  async getCertificate(order, preferredChain = null): Promise<NjsByteString> {
-    if (!validStates.includes(order.status)) {
+  async getCertificate(
+    order: Record<string, unknown>,
+    _preferredChain: string | null = null // TODO delete?
+  ): Promise<NjsByteString> {
+    if (!validStates.includes(order.status as string)) {
       order = await this.waitForValidStatus(order)
     }
 
@@ -760,20 +777,23 @@ export class AcmeClient {
       throw new Error('Unable to download certificate, URL not found')
     }
 
-    const resp = await this.api.apiRequest(order.certificate, null, [200])
+    const resp = await this.api.apiRequest(order.certificate as string, null, [
+      200,
+    ])
 
     /* Handle alternate certificate chains */
-    if (preferredChain && resp.headers.link) {
-      const alternateLinks = util.parseLinkHeader(resp.headers.link)
-      const alternates = await Promise.all(
-        alternateLinks.map(async (link) =>
-          this.api.apiRequest(link, null, [200])
-        )
-      )
-      const certificates = [resp].concat(alternates).map((c) => c.data)
+    // TODO -- SHOULD WE DELETE THIS? OR IMPLEMENT utils.*
+    //if (preferredChain && resp.headers.link) {
+    //  const alternateLinks = util.parseLinkHeader(resp.headers.link)
+    //  const alternates = await Promise.all(
+    //    alternateLinks.map(async (link: string) =>
+    //      this.api.apiRequest(link, null, [200])
+    //    )
+    //  )
+    //  const certificates = [resp].concat(alternates).map((c) => c.data)
 
-      return util.findCertificateChainForIssuer(certificates, preferredChain)
-    }
+    //  return util.findCertificateChainForIssuer(certificates, preferredChain)
+    //}
 
     /* Return default certificate chain */
     // FIXME: is it json() or text()
@@ -803,10 +823,13 @@ export class AcmeClient {
    * });
    * ```
    */
-  async revokeCertificate(cert: Buffer | string, data = {}) {
-    data.certificate = getPemBodyAsB64u(cert)
+  async revokeCertificate(
+    cert: Buffer | string,
+    data: Record<string, unknown> = {}
+  ): Promise<Record<string, unknown>> {
+    data.certificate = getPemBodyAsB64u(cert.toString())
     const resp = await this.api.revokeCert(data)
-    return await resp.json()
+    return (await resp.json()) as Record<string, unknown>
   }
 
   /**
@@ -857,7 +880,7 @@ export class AcmeClient {
    * });
    * ```
    */
-  auto(opts: ClientAutoOptions) {
+  auto(opts: ClientAutoOptions): Promise<NjsByteString> {
     return auto(this, opts)
   }
 }
@@ -888,9 +911,11 @@ async function auto(
   userOpts: ClientAutoOptions
 ): Promise<NjsByteString> {
   const opts = Object.assign({}, autoDefaultOpts, userOpts)
-  const accountPayload = { termsOfServiceAgreed: opts.termsOfServiceAgreed }
+  const accountPayload: Record<string, unknown> = {
+    termsOfServiceAgreed: opts.termsOfServiceAgreed,
+  }
 
-  if (!Buffer.isBuffer(opts.csr)) {
+  if (!Buffer.isBuffer(opts.csr) && opts.csr) {
     opts.csr = Buffer.from(opts.csr)
   }
 
@@ -950,8 +975,8 @@ async function auto(
     'njs-acme: [auto] Resolving and satisfying authorization challenges'
   )
 
-  const challengePromises = authorizations.map(async (authz) => {
-    const d = authz.identifier.value
+  const challengePromises = authorizations.map(async (authz: Authorization) => {
+    const d = authz.identifier?.value
     let challengeCompleted = false
 
     /* Skip authz that already has valid status */
@@ -966,9 +991,9 @@ async function auto(
     try {
       /* Select challenge based on priority */
       const challenge = authz.challenges
-        .sort((a, b) => {
-          const aidx = opts.challengePriority!.indexOf(a.type)
-          const bidx = opts.challengePriority!.indexOf(b.type)
+        ?.sort((a: Challenge, b: Challenge) => {
+          const aidx = opts.challengePriority?.indexOf(a.type as string) || -1
+          const bidx = opts.challengePriority?.indexOf(b.type as string) || -1
 
           if (aidx === -1) return 1
           if (bidx === -1) return -1
@@ -1011,25 +1036,31 @@ async function auto(
         } catch (e) {
           ngx.log(
             ngx.INFO,
-            `njs-acme: [auto] [${d}] challengeRemoveFn threw error: ${e.message}`
+            `njs-acme: [auto] [${d}] challengeRemoveFn threw error: ${
+              (e as Error).message
+            }`
           )
         }
       }
-    } catch (e) {
+    } catch (e: unknown) {
       /* Deactivate pending authz when unable to complete challenge */
       if (!challengeCompleted) {
         ngx.log(
           ngx.INFO,
-          `njs-acme: [auto] [${d}] Unable to complete challenge: ${e.message}`
+          `njs-acme: [auto] [${d}] Unable to complete challenge: ${
+            (e as Error).message
+          }`
         )
 
         try {
           await client.deactivateAuthorization(authz)
-        } catch (f) {
+        } catch (f: unknown) {
           /* Suppress deactivateAuthorization() errors */
           ngx.log(
             ngx.INFO,
-            `njs-acme: [auto] [${d}] Authorization deactivation threw error: ${f.message}`
+            `njs-acme: [auto] [${d}] Authorization deactivation threw error: ${
+              (f as Error).message
+            }`
           )
         }
       }
@@ -1041,11 +1072,15 @@ async function auto(
   ngx.log(ngx.INFO, 'njs-acme: [auto] Waiting for challenge valid status')
   await Promise.all(challengePromises)
 
+  if (!opts.csr) {
+    throw new Error('options is missing required csr')
+  }
+
   /**
    * Finalize order and download certificate
    */
   ngx.log(ngx.INFO, 'njs-acme: [auto] Finalize order and download certificate')
-  const finalized = await client.finalizeOrder(order, opts.csr)
+  const finalized = await client.finalizeOrder(order, opts.csr.toString())
   const certData = await client.getCertificate(finalized, opts.preferredChain)
   return certData
 }

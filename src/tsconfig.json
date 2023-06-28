@@ -27,6 +27,7 @@
     // "alwaysStrict": true,
     "isolatedModules": true,
     "resolveJsonModule" : true,
+    "rootDir": "../",
     "typeRoots": [],
     "types": [
       "njs-types",
@@ -34,6 +35,7 @@
   },
   "include": [
     ".",
+    "../package.json"
   ],
   "exclude": [
     "../node_modules"

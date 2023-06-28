@@ -43,7 +43,9 @@ async function clientNewAccount(r: NginxHTTPRequest): Promise<void> {
     })
     return r.return(200, JSON.stringify(account))
   } catch (e) {
-    ngx.log(ngx.ERR, `Error creating ACME account. Error=${e}`)
+    const errMsg = `Error creating ACME account. Error=${e}`
+    ngx.log(ngx.ERR, errMsg)
+    return r.return(500, errMsg)
   }
 }
 
@@ -82,7 +84,7 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
 
     certInfo = await readCertificateInfo(certData)
     // Calculate the date 30 days before the certificate expiration
-    const renewalThreshold = new Date(certInfo.notAfter)
+    const renewalThreshold = new Date(certInfo.notAfter as string)
     renewalThreshold.setDate(renewalThreshold.getDate() - 30)
 
     const currentDate = new Date()

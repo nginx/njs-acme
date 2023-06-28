@@ -3,6 +3,8 @@ import * as pkijs from 'pkijs'
 import * as asn1js from 'asn1js'
 import fs from 'fs'
 import querystring from 'querystring'
+import { SignedPayload } from './api.js'
+import { ClientExternalAccountBindingOptions } from './client.js'
 
 // workaround for PKI.JS to work
 globalThis.unescape = querystring.unescape
@@ -18,10 +20,12 @@ pkijs.setEngine(
 if (!Array.from) {
   Array.from = (function () {
     const toStr = Object.prototype.toString
-    const isCallable = function (fn) {
+    const isCallable = function (
+      fn: ((arg0: unknown, arg1?: unknown) => unknown) | Array<unknown>
+    ) {
       return typeof fn === 'function' || toStr.call(fn) === '[object Function]'
     }
-    const toInteger = function (value) {
+    const toInteger = function (value: unknown) {
       const number = Number(value)
       if (isNaN(number)) {
         return 0
@@ -32,28 +36,35 @@ if (!Array.from) {
       return (number > 0 ? 1 : -1) * Math.floor(Math.abs(number))
     }
     const maxSafeInteger = Math.pow(2, 53) - 1
-    const toLength = function (value) {
+    const toLength = function (value: unknown) {
       const len = toInteger(value)
       return Math.min(Math.max(len, 0), maxSafeInteger)
     }
 
     // The length property of the from method is 1.
-    return function from(arrayLike /*, mapFn, thisArg */) {
+    return function from(
+      this: Array<unknown> | ((arg1: unknown, arg2?: unknown) => unknown),
+      ...args: unknown[] /*, mapFn, thisArg */
+    ) {
       // 1. Let C be the this value.
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
       const C = this
 
       // 2. Let items be ToObject(arrayLike).
-      const items = Object(arrayLike)
+      const items = Object(args)
 
       // 3. ReturnIfAbrupt(items).
-      if (arrayLike == null) {
+      if (args == null) {
         throw new TypeError(
           'Array.from requires an array-like object - not null or undefined'
         )
       }
 
       // 4. If mapfn is undefined, then let mapping be false.
-      const mapFn = arguments.length > 1 ? arguments[1] : void undefined
+      const mapFn =
+        arguments.length > 1
+          ? (args[1] as (arg0: unknown, arg1: unknown) => unknown)
+          : void undefined
       let T
       if (typeof mapFn !== 'undefined') {
         // 5. else
@@ -66,7 +77,7 @@ if (!Array.from) {
 
         // 5. b. If thisArg was supplied, let T be thisArg; else let T be undefined.
         if (arguments.length > 2) {
-          T = arguments[2]
+          T = args[2]
         }
       }
 
@@ -77,12 +88,13 @@ if (!Array.from) {
       // 13. If IsConstructor(C) is true, then
       // 13. a. Let A be the result of calling the [[Construct]] internal method of C with an argument list containing the single item len.
       // 14. a. Else, Let A be ArrayCreate(len).
-      const A = isCallable(C) ? Object(new C(len)) : new Array(len)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const A = isCallable(C) ? Object(new (C as any)(len)) : new Array(len)
 
       // 16. Let k be 0.
       let k = 0
       // 17. Repeat, while k < len… (also steps a - h)
-      let kValue
+      let kValue: unknown
       while (k < len) {
         kValue = items[k]
         if (mapFn) {
@@ -107,6 +119,7 @@ export interface RsaPublicJwk {
   e: string
   kty: string
   n: string
+  externalAccountBinding?: ClientExternalAccountBindingOptions
 }
 
 export interface EcdsaPublicJwk {
@@ -114,6 +127,7 @@ export interface EcdsaPublicJwk {
   kty: string
   x: string
   y: string
+  externalAccountBinding?: ClientExternalAccountBindingOptions
 }
 
 const ACCOUNT_KEY_ALG_GENERATE: RsaHashedKeyGenParams = {
@@ -736,7 +750,7 @@ export async function importPemPrivateKey(pem: string): Promise<CryptoKey> {
   const privateKey = await crypto.subtle.importKey(
     'pkcs8',
     privateKeyInfo.toSchema().toBER(false),
-    { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } },
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
     true,
     ['sign']
   )
@@ -750,7 +764,7 @@ export async function importPemPrivateKey(pem: string): Promise<CryptoKey> {
  * @param {string} tag The tag name used to identify the PEM block.
  * @returns Buffer
  */
-export function pemToBuffer(pem: string, tag: PemTag = 'PRIVATE KEY') {
+export function pemToBuffer(pem: string, tag: PemTag = 'PRIVATE KEY'): Buffer {
   return Buffer.from(
     pem.replace(
       new RegExp(`(-----BEGIN ${tag}-----|-----END ${tag}-----|\n)`, 'g'),
@@ -767,7 +781,9 @@ export function pemToBuffer(pem: string, tag: PemTag = 'PRIVATE KEY') {
  * @param {buffer|string} certPem PEM encoded certificate or chain
  * @returns {object} Certificate info
  */
-export async function readCertificateInfo(certPem: string) {
+export async function readCertificateInfo(
+  certPem: string
+): Promise<Record<string, unknown>> {
   const domains = readCsrDomainNames(certPem)
   const certBuffer = pemToBuffer(certPem, 'CERTIFICATE')
   const cert = pkijs.Certificate.fromBER(certBuffer)
@@ -791,7 +807,7 @@ export async function readCertificateInfo(certPem: string) {
  * @param {buffer|string} chainPem PEM encoded object chain
  * @returns {array} Array of PEM objects including headers
  */
-export function splitPemChain(chainPem: Buffer | string) {
+export function splitPemChain(chainPem: Buffer | string): (string | null)[] {
   if (Buffer.isBuffer(chainPem)) {
     chainPem = chainPem.toString()
   }
@@ -844,7 +860,7 @@ export function getVariable(
   r: NginxHTTPRequest,
   varname: string,
   defaultVal?: string
-) {
+): string {
   const retval =
     process.env[varname.toUpperCase()] || r.variables[varname] || defaultVal
   if (retval === undefined) {
@@ -860,7 +876,7 @@ export function getVariable(
  * @param r request
  * @returns array of hostnames
  */
-export function acmeServerNames(r: NginxHTTPRequest) {
+export function acmeServerNames(r: NginxHTTPRequest): string[] {
   const nameStr = getVariable(r, 'njs_acme_server_names') // no default == mandatory
   // split string value on comma and/or whitespace and lowercase each element
   return nameStr.split(/[,\s]+/).map((n) => n.toLocaleLowerCase())
@@ -871,7 +887,7 @@ export function acmeServerNames(r: NginxHTTPRequest) {
  * @param r request
  * @returns configured path or default
  */
-export function acmeDir(r: NginxHTTPRequest) {
+export function acmeDir(r: NginxHTTPRequest): string {
   return getVariable(r, 'njs_acme_dir', '/etc/acme')
 }
 
@@ -879,7 +895,7 @@ export function acmeDir(r: NginxHTTPRequest) {
  * Returns the path for the account private JWK
  * @param r {NginxHTTPRequest}
  */
-export function acmeAccountPrivateJWKPath(r: NginxHTTPRequest) {
+export function acmeAccountPrivateJWKPath(r: NginxHTTPRequest): string {
   return getVariable(
     r,
     'njs_acme_account_private_jwk',
@@ -891,7 +907,7 @@ export function acmeAccountPrivateJWKPath(r: NginxHTTPRequest) {
  * Returns the ACME directory URI
  * @param r {NginxHTTPRequest}
  */
-export function acmeDirectoryURI(r: NginxHTTPRequest) {
+export function acmeDirectoryURI(r: NginxHTTPRequest): string {
   return getVariable(
     r,
     'njs_acme_directory_uri',
@@ -904,7 +920,7 @@ export function acmeDirectoryURI(r: NginxHTTPRequest) {
  * @param r {NginxHTTPRequest}
  * @returns boolean
  */
-export function acmeVerifyProviderHTTPS(r: NginxHTTPRequest) {
+export function acmeVerifyProviderHTTPS(r: NginxHTTPRequest): boolean {
   return (
     ['true', 'yes', '1'].indexOf(
       getVariable(r, 'njs_acme_verify_provider_https', 'true')
@@ -919,7 +935,7 @@ export function acmeVerifyProviderHTTPS(r: NginxHTTPRequest) {
  * @param args path fragments to join
  * @returns joined path string
  */
-export function joinPaths(...args: string[]) {
+export function joinPaths(...args: string[]): string {
   // join args with a slash remove duplicate slashes
   return args.join('/').replace(/\/+/g, '/')
 }

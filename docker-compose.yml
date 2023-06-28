@@ -20,12 +20,7 @@ services:
   node:
     build:
       context: .
-      dockerfile_inline: |
-        FROM node:18
-        WORKDIR /app
-        COPY package*.json .
-        RUN npm ci
-        CMD npm run watch
+      dockerfile: Dockerfile.node
     volumes:
       - .:/app
       - /app/node_modules
