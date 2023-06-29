@@ -857,7 +857,13 @@ export function readCsrDomainNames(csrPem: string | Buffer): {
  */
 export function getVariable(
   r: NginxHTTPRequest,
-  varname: string,
+  varname:
+    | 'njs_acme_account_email'
+    | 'njs_acme_server_names'
+    | 'njs_acme_dir'
+    | 'njs_acme_account_private_jwk'
+    | 'njs_acme_directory_uri'
+    | 'njs_acme_verify_provider_https',
   defaultVal?: string
 ): string {
   const retval =
