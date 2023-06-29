@@ -23,40 +23,38 @@ build: ## Run npm run build
 	$Q npm run build
 
 
-.PHONY: build-docker
-build-docker: ## Build docker image
+.PHONY: docker-build
+docker-build: ## Build docker image
 	$(DOCKER) build $(DOCKER_BUILD_FLAGS) -t $(PROJECT_NAME) .
 
 
-.PHONY: copy-docker
-copy-docker: CONTAINER_ID=$(shell $(DOCKER) create $(PROJECT_NAME))
-copy-docker: build-docker ## Copy the acme.js file out of the container and save in dist/
+.PHONY: docker-copy
+docker-copy: CONTAINER_ID=$(shell $(DOCKER) create $(PROJECT_NAME))
+docker-copy: docker-build ## Copy the acme.js file out of the container and save in dist/
 	echo ${CONTAINER_ID}
 	$(DOCKER) cp ${CONTAINER_ID}:/usr/lib/nginx/njs_modules/acme.js dist/acme.js
 	$(DOCKER) rm -v ${CONTAINER_ID}
 
 
-.PHONY: start-docker
-start-docker: build-docker ## Start nginx container
+.PHONY: docker-nginx
+docker-nginx: docker-build ## Start nginx container
 	$(DOCKER) run --rm -it -p 8000:8000 \
-		-e "NJS_ACME_DIR=/etc/nginx/examples" \
-		-v $(CURRENT_DIR)/examples:/etc/nginx/examples/ \
-		-v $(CURRENT_DIR)/dist:/usr/lib/nginx/njs_modules/ $(PROJECT_NAME) nginx -c examples/nginx.conf
+		-e "NJS_ACME_DIR=/etc/acme" \
+		$(PROJECT_NAME)
 
 
-.PHONY: start-njs
-start-njs: build-docker ## Start nginx container and run `njs`
+.PHONY: docker-njs
+docker-njs: docker-build ## Start nginx container and run `njs`
 	$(DOCKER) run --rm -it -p 8000:8000 \
-		-e "NJS_ACME_DIR=/etc/nginx/examples" \
-		-v $(CURRENT_DIR)/examples:/etc/nginx/examples/ \
-		-v $(CURRENT_DIR)/dist:/usr/lib/nginx/njs_modules/ $(PROJECT_NAME) njs
+		-e "NJS_ACME_DIR=/etc/acme" \
+		$(PROJECT_NAME) njs
 
 
-.PHONY: start-all
-start-all: build ## Start all docker compose services
+.PHONY: docker-devup
+docker-devup: docker-build ## Start all docker compose services
 	$(DOCKER) compose up -d
 
 
-.PHONY: reload-nginx
-reload-nginx: build start-all ## Reload nginx
+.PHONY: docker-reload-nginx
+docker-reload-nginx: ## Reload nginx
 	$(DOCKER) compose up -d --force-recreate nginx && $(DOCKER) compose logs -f nginx

@@ -884,7 +884,7 @@ export function getVariable(
 export function acmeServerNames(r: NginxHTTPRequest): string[] {
   const nameStr = getVariable(r, 'njs_acme_server_names') // no default == mandatory
   // split string value on comma and/or whitespace and lowercase each element
-  return nameStr.split(/[,\s]+/).map((n) => n.toLocaleLowerCase())
+  return nameStr.split(/[,\s]+/).map((n) => n.toLowerCase())
 }
 
 /**
