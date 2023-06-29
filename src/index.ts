@@ -131,12 +131,9 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
     fs.writeFileSync(pkeyPath, pkeyPem)
     ngx.log(ngx.INFO, `njs-acme: [auto] Wrote Private key to ${pkeyPath}`)
 
-    // default challengePath = acmeDir/challenge
-    const challengePath = getVariable(
-      r,
-      'njs_acme_challenge_dir',
-      joinPaths(acmeDir(r), 'challenge')
-    )
+    // this is the only variable that has to be set in nginx.conf
+    const challengePath = r.variables.njs_acme_challenge_dir
+
     if (challengePath === undefined || challengePath.length === 0) {
       return r.return(
         500,

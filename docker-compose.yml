@@ -20,25 +20,26 @@ services:
   node:
     build:
       context: .
-      dockerfile: Dockerfile.node
+      dockerfile: dev/Dockerfile.node
     volumes:
       - .:/app
       - /app/node_modules
       - node_dist:/app/dist
   nginx:
     image: nginxinc/njs-acme
-    build: .
+    build:
+      dockerfile: dev/Dockerfile.nginx
     command: /nginx_wait_for_js nginx -c examples/nginx.conf
     depends_on:
       - node
     hostname: proxy.nginx.com
     volumes:
       - ./examples:/etc/nginx/examples/
-      - ./nginx_wait_for_js:/nginx_wait_for_js
+      - ./dev/nginx_wait_for_js:/nginx_wait_for_js
       - node_dist:/usr/lib/nginx/njs_modules/
       - certs:/etc/letsencrypt/
     environment:
-      - NJS_ACME_DIR=/etc/letsencrypt/
+      - NJS_ACME_DIR=/etc/acme/
       - NJS_ACME_VERIFY_PROVIDER_HTTPS=false
       - NJS_ACME_DIRECTORY_URI=https://pebble/dir
       - NJS_ACME_ACCOUNT_EMAIL=test@example.com
