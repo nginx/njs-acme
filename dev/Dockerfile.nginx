@@ -11,3 +11,4 @@ RUN --mount=type=cache,target=/var/cache/apt <<EOF
     apt-get remove --purge --auto-remove --yes
 EOF
 RUN mkdir -p /usr/lib/nginx/njs_modules
+RUN mkdir -p /etc/acme
