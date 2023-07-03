@@ -25,7 +25,7 @@ build: ## Run npm run build
 
 .PHONY: docker-build
 docker-build: ## Build docker image
-	$(DOCKER) build $(DOCKER_BUILD_FLAGS) -t $(PROJECT_NAME) .
+	$(DOCKER) buildx build $(DOCKER_BUILD_FLAGS) -t $(PROJECT_NAME) .
 
 
 .PHONY: docker-copy
