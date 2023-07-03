@@ -1,5 +1,5 @@
 import { HttpClient } from './api'
-import { formatResponseError, getPemBodyAsB64u, retry } from './utils'
+import { formatResponseError, getPemBodyAsB64u, readCsrDomainNames, retry, toPEM } from './utils'
 import OGCrypto from 'crypto'
 
 export interface ClientExternalAccountBindingOptions {
@@ -795,7 +795,6 @@ export class AcmeClient {
     //}
 
     /* Return default certificate chain */
-    // FIXME: is it json() or text()
     return await resp.text()
   }
 
@@ -941,19 +940,33 @@ async function auto(
   /**
    * Parse domains from CSR
    */
-  // FIXME implement parsing CSR to get a list of domain...
   ngx.log(
     ngx.INFO,
     'njs-acme: [auto] Parsing domains from Certificate Signing Request'
   )
-  // const csrDomains = readCsrDomains(opts.csr);
-  // const domains = [csrDomains.commonName].concat(csrDomains.altNames);
-  // const uniqueDomains = Array.from(new Set(domains));
 
-  const uniqueDomains = ['proxy.nginx.com']
+  const csrDomains = readCsrDomainNames(toPEM(opts.csr, 'CERTIFICATE REQUEST'));
+  ngx.log(ngx.INFO, `csrDomains=${JSON.stringify(csrDomains)}`)
+  const uniqueDomains = [csrDomains.commonName]
+
+  // Work around issue in x509.get_oid_value where altNames comes back as an Array in an Array, e.g.:
+  //   [[ 'hostname1', 'hostname2' ]]
+  // We just want an Array:
+  //   [ 'hostname1', 'hostname2' ]
+  let altNames = csrDomains.altNames
+  if (altNames && altNames[0] && altNames[0][0]) {
+    altNames = altNames[0]
+  }
+
+  for (const altName of altNames) {
+    if (uniqueDomains.indexOf(altName) === -1) {
+      uniqueDomains.push(altName)
+    }
+  }
+
   ngx.log(
     ngx.INFO,
-    `njs-acme: [auto] Resolved ${uniqueDomains.length} unique domains from parsing the Certificate Signing Request`
+    `njs-acme: [auto] Resolved ${uniqueDomains.length} unique domains (${uniqueDomains.join(', ')}) from parsing the Certificate Signing Request`
   )
 
   /**

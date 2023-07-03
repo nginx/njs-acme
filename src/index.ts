@@ -112,11 +112,8 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
 
     // Create a new CSR
     const params = {
-      altNames: [commonName],
+      altNames: serverNames.length > 1 ? serverNames.slice(1) : [],
       commonName: commonName,
-      // state: "WA",
-      // country: "US",
-      // organizationUnit: "NGINX",
       emailAddress: email,
     }
 
@@ -277,9 +274,10 @@ async function createCsrHandler(r: NginxHTTPRequest): Promise<void> {
  */
 function js_cert(r: NginxHTTPRequest): string {
   const prefix = acmeDir(r)
+  const serverNames = acmeServerNames(r)
   const { path, data } = read_cert_or_key(
     prefix,
-    r.variables.ssl_server_name?.toLowerCase() || '',
+    serverNames[0].toLowerCase(), // filename is the commonName (first serverName)
     CERTIFICATE_SUFFIX
   )
   // ngx.log(ngx.INFO, `njs-acme: Loaded cert for ${r.variables.ssl_server_name} from path: ${path}`);
@@ -304,9 +302,10 @@ function js_cert(r: NginxHTTPRequest): string {
  */
 function js_key(r: NginxHTTPRequest): string {
   const prefix = acmeDir(r)
+  const serverNames = acmeServerNames(r)
   const { path } = read_cert_or_key(
     prefix,
-    r.variables.ssl_server_name?.toLowerCase() || '',
+    serverNames[0].toLowerCase(), // filename is the commonName (first serverName)
     KEY_SUFFIX
   )
   // r.log(`njs-acme: loaded key for ${r.variables.ssl_server_name} from path: ${path}`);

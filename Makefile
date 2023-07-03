@@ -3,7 +3,7 @@
 GREP               ?= $(shell command -v ggrep 2> /dev/null || command -v grep 2> /dev/null)
 AWK                ?= $(shell command -v gawk 2> /dev/null || command -v awk 2> /dev/null)
 DOCKER             ?= docker
-PROJECT_NAME       ?= njs-acme
+PROJECT_NAME       ?= nginx-njs-acme
 GITHUB_REPOSITORY  ?= nginxinc/$(PROJECT_NAME)
 SRC_REPO           := https://github.com/$(GITHUB_REPOSITORY)
 CURRENT_DIR 		= $(shell pwd)
@@ -32,6 +32,7 @@ docker-build: ## Build docker image
 docker-copy: CONTAINER_ID=$(shell $(DOCKER) create $(PROJECT_NAME))
 docker-copy: docker-build ## Copy the acme.js file out of the container and save in dist/
 	echo ${CONTAINER_ID}
+	mkdir -p dist
 	$(DOCKER) cp ${CONTAINER_ID}:/usr/lib/nginx/njs_modules/acme.js dist/acme.js
 	$(DOCKER) rm -v ${CONTAINER_ID}
 
