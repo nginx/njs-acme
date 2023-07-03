@@ -11,7 +11,7 @@ import {
   ClientExternalAccountBindingOptions,
   OrderCreateRequest,
 } from './client'
-import crypto from 'crypto'
+import OGCrypto from 'crypto'
 
 export type AcmeMethod = 'GET' | 'HEAD' | 'POST' | 'POST-as-GET'
 export type AcmeResource =
@@ -363,20 +363,15 @@ export class HttpClient {
     const resp = await this.request(url, 'POST', JSON.stringify(data))
 
     if (resp.status === 400) {
-      // FIXME: potential issue here as we reading the response body
-      // TODO: refactor maybe
-      const respData = (await resp.json()) as Record<string, unknown>
-      /* Retry on bad nonce - https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-6.4 */
-      if (
-        respData?.type === 'urn:ietf:params:acme:error:badNonce' &&
-        attempts < this.maxBadNonceRetries
-      ) {
+      // Retry on bad nonce - https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-6.4
+      // or bad response code.
+      if (attempts < this.maxBadNonceRetries) {
         nonce = resp.headers.get('replay-nonce') || null
         attempts += 1
 
         ngx.log(
           ngx.WARN,
-          `njs-acme: [http] Invalid nonce error, retrying (${attempts}/${this.maxBadNonceRetries}) signed request to: ${url}`
+          `njs-acme: [http] Error response from server, retrying (${attempts}/${this.maxBadNonceRetries}) signed request to: ${url}`
         )
         return this.signedRequest(
           url,
@@ -660,7 +655,7 @@ export class HttpClient {
       nonce,
       kid,
     })
-    const h = crypto.createHmac('sha256', Buffer.from(hmacKey, 'base64'))
+    const h = OGCrypto.createHmac('sha256', Buffer.from(hmacKey, 'base64'))
     h.update(`${result.protected}.${result.payload}`)
     result.signature = h.digest('base64url')
     return result
@@ -715,18 +710,13 @@ export class HttpClient {
       )
     }
 
-    // njs-types/crypto.d.ts does not contain a `subtle` propery on the crypto object
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    const subtle = crypto.subtle as SubtleCrypto
-
     let sign
     if (jwk.kty === 'EC') {
-      const hash = await subtle.digest(
+      const hash = await crypto.subtle.digest(
         signerAlg as HashVariants,
         `${result.protected}.${result.payload}`
       )
-      sign = await subtle.sign(
+      sign = await crypto.subtle.sign(
         {
           name: 'ECDSA',
           hash: hash.toString() as HashVariants,
@@ -735,7 +725,7 @@ export class HttpClient {
         hash
       )
     } else {
-      sign = await subtle.sign(
+      sign = await crypto.subtle.sign(
         { name: 'RSASSA-PKCS1-v1_5' },
         this.accountKey,
         `${result.protected}.${result.payload}`

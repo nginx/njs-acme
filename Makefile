@@ -39,14 +39,14 @@ docker-copy: docker-build ## Copy the acme.js file out of the container and save
 .PHONY: docker-nginx
 docker-nginx: docker-build ## Start nginx container
 	$(DOCKER) run --rm -it -p 8000:8000 \
-		-e "NJS_ACME_DIR=/etc/acme" \
+		-e "NJS_ACME_DIR=/etc/nginx/njs-acme" \
 		$(PROJECT_NAME)
 
 
 .PHONY: docker-njs
 docker-njs: docker-build ## Start nginx container and run `njs`
 	$(DOCKER) run --rm -it -p 8000:8000 \
-		-e "NJS_ACME_DIR=/etc/acme" \
+		-e "NJS_ACME_DIR=/etc/nginx/njs-acme" \
 		$(PROJECT_NAME) njs
 
 

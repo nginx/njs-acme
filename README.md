@@ -45,7 +45,7 @@ You can use environment variables or NGINX configuration variables to control th
    - `NJS_ACME_DIR`\
         Path to store ACME-related files such as keys, certificate requests, certificates, etc.\
         value: Any valid system path writable by the `nginx` user. \
-        default: `/etc/acme/`
+        default: `/etc/nginx/njs-acme/`
 
    - `NJS_ACME_ACCOUNT_PRIVATE_JWK`\
         Path to fetch/store the account private JWK.\
@@ -92,7 +92,7 @@ There are a few pieces that are required to be present in your `nginx.conf` file
   ```
 * Set the directory to store challenges. This is also used in a `location{}` block below.
   ```nginx
-  set $njs_acme_challenge_dir /etc/acme/challenge;
+  set $njs_acme_challenge_dir /etc/nginx/njs-acme/challenge;
   ```
 * Set and use variables to hold the certificate and key paths using Javascript.
   ```nginx
