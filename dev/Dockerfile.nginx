@@ -1,4 +1,5 @@
-FROM nginx:1.24.0
+ARG NGINX_VERSION=1.24.0
+FROM nginx:${NGINX_VERSION}
 
 # following installation steps from http://nginx.org/en/linux_packages.html#Debian
 RUN --mount=type=cache,target=/var/cache/apt <<EOF
@@ -11,4 +12,5 @@ RUN --mount=type=cache,target=/var/cache/apt <<EOF
     apt-get remove --purge --auto-remove --yes
 EOF
 RUN mkdir -p /usr/lib/nginx/njs_modules
-RUN mkdir -p /etc/acme
+RUN mkdir -p /etc/nginx/njs-acme
+RUN chown nginx: /etc/nginx/njs-acme

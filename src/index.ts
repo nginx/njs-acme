@@ -159,7 +159,7 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
     }
 
     certificatePem = await client.auto({
-      csr: result.pkcs10Ber,
+      csr: Buffer.from(result.pkcs10Ber),
       email: email,
       termsOfServiceAgreed: true,
       challengeCreateFn: async (authz, challenge, keyAuthorization) => {

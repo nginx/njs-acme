@@ -1,6 +1,6 @@
 import { HttpClient } from './api'
 import { formatResponseError, getPemBodyAsB64u, retry } from './utils'
-import crypto from 'crypto'
+import OGCrypto from 'crypto'
 
 export interface ClientExternalAccountBindingOptions {
   kid: string
@@ -153,7 +153,7 @@ export interface ClientOptions {
 }
 
 export interface ClientAutoOptions {
-  csr: ArrayBuffer | Buffer | string | null
+  csr: Buffer | string | null
   challengeCreateFn: (
     authz: Authorization,
     challenge: Challenge,
@@ -538,8 +538,7 @@ export class AcmeClient {
       csr = Buffer.from(csr)
     }
 
-    // FIXME
-    const data = { csr: getPemBodyAsB64u(csr.toString()) }
+    const data = { csr: getPemBodyAsB64u(csr) }
     let resp
     try {
       resp = await this.api.finalizeOrder(order.finalize, data)
@@ -637,7 +636,7 @@ export class AcmeClient {
   async getChallengeKeyAuthorization(challenge: Challenge): Promise<string> {
     const jwk = await this.api.getJwk()
 
-    const keysum = crypto.createHash('sha256').update(JSON.stringify(jwk))
+    const keysum = OGCrypto.createHash('sha256').update(JSON.stringify(jwk))
     const thumbprint = keysum.digest('base64url')
     const result = `${challenge.token}.${thumbprint}`
 
@@ -827,7 +826,7 @@ export class AcmeClient {
     cert: Buffer | string,
     data: Record<string, unknown> = {}
   ): Promise<Record<string, unknown>> {
-    data.certificate = getPemBodyAsB64u(cert.toString())
+    data.certificate = getPemBodyAsB64u(cert)
     const resp = await this.api.revokeCert(data)
     return (await resp.json()) as Record<string, unknown>
   }
@@ -1080,7 +1079,7 @@ async function auto(
    * Finalize order and download certificate
    */
   ngx.log(ngx.INFO, 'njs-acme: [auto] Finalize order and download certificate')
-  const finalized = await client.finalizeOrder(order, opts.csr.toString())
+  const finalized = await client.finalizeOrder(order, opts.csr)
   const certData = await client.getCertificate(finalized, opts.preferredChain)
   return certData
 }
