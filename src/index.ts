@@ -326,6 +326,11 @@ async function challengeResponse(r: NginxHTTPRequest): Promise<void> {
   }
   const token = r.uri.substring(challengeUriPrefix.length)
 
+  // Token must only contain base64url chars
+  if (token.match(/[^a-zA-Z0-9-_]/)) {
+    return r.return(400, 'Bad Request')
+  }
+
   try {
     return r.return(
       200,
