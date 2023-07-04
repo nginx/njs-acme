@@ -8,6 +8,7 @@ import {
   getVariable,
   joinPaths,
   acmeDir,
+  acmeChallengeDir,
   acmeAccountPrivateJWKPath,
   acmeDirectoryURI,
   acmeVerifyProviderHTTPS,
@@ -131,25 +132,13 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
     fs.writeFileSync(pkeyPath, pkeyPem)
     log.info(`Wrote Private key to ${pkeyPath}`)
 
-    // this is the only variable that has to be set in nginx.conf
-    const challengePath = r.variables.njs_acme_challenge_dir
+    const challengePath = acmeChallengeDir(r)
 
-    if (challengePath === undefined || challengePath.length === 0) {
-      return r.return(
-        500,
-        "Nginx variable 'njs_acme_challenge_dir' must be set"
-      )
-    }
-    log.info('Issuing a new Certificate:', params)
-    const fullChallengePath = joinPaths(
-      challengePath,
-      '.well-known/acme-challenge'
-    )
     try {
-      fs.mkdirSync(fullChallengePath, { recursive: true })
+      fs.mkdirSync(challengePath, { recursive: true })
     } catch (e) {
       log.error(
-        `Error creating directory to store challenges at ${fullChallengePath}. Ensure the ${challengePath} directory is writable by the nginx user.`
+        `Error creating directory to store challenges. Ensure the ${challengePath} directory is writable by the nginx user.`
       )
 
       return r.return(500, 'Cannot create challenge directory')
@@ -165,11 +154,11 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
           `Writing challenge file so nginx can serve it via .well-known/acme-challenge/${challenge.token}`
         )
 
-        const path = joinPaths(fullChallengePath, challenge.token)
+        const path = joinPaths(challengePath, challenge.token)
         fs.writeFileSync(path, keyAuthorization)
       },
       challengeRemoveFn: async (_authz, challenge, _keyAuthorization) => {
-        const path = joinPaths(fullChallengePath, challenge.token)
+        const path = joinPaths(challengePath, challenge.token)
         try {
           fs.unlinkSync(path)
           log.info(`removed challenge ${path}`)
@@ -327,13 +316,35 @@ function read_cert_or_key(prefix: string, domain: string, suffix: string) {
   return { path, data }
 }
 
+/*
+ * Demonstrates using js_content to serve challenge responses.
+ */
+async function challengeResponse(r: NginxHTTPRequest): Promise<void> {
+  const challengeUriPrefix = '/.well-known/acme-challenge/'
+  if (!r.uri.startsWith(challengeUriPrefix)) {
+    return r.return(400, 'Bad Request')
+  }
+  const token = r.uri.substring(challengeUriPrefix.length)
+
+  try {
+    return r.return(
+      200,
+      // just return the contents of the token file
+      fs.readFileSync(joinPaths(acmeChallengeDir(r), token), 'utf8')
+    )
+  } catch (e) {
+    return r.return(404, 'Not Found')
+  }
+}
+
 export default {
   js_cert,
   js_key,
   acmeNewAccount,
+  challengeResponse,
   clientNewAccount,
   clientAutoMode,
   createCsrHandler,
   LogLevel,
-  Logger
+  Logger,
 }

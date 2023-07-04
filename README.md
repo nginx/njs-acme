@@ -25,12 +25,6 @@ You can use environment variables or NGINX configuration variables to control th
         value: Space-separated list of hostnames, e.g. `www1.mydomain.com www2.mydomain.com`\
         default: none (you must specify this!)
 
-### NGINX Variables Only (not allowed as environment variable)
-   - `njs_acme_challenge_dir`\
-        NGINX variable with the path to where store HTTP-01 challenges.\
-        value: Any valid system path writable by the `nginx` user.\
-        default: none (you must specify this!)
-
 ### Optional Variables
    - `NJS_ACME_VERIFY_PROVIDER_HTTPS`\
         Verifies the ACME provider SSL certificate when connecting.\
@@ -46,6 +40,11 @@ You can use environment variables or NGINX configuration variables to control th
         Path to store ACME-related files such as keys, certificate requests, certificates, etc.\
         value: Any valid system path writable by the `nginx` user. \
         default: `/etc/nginx/njs-acme/`
+
+   - `NJS_ACME_CHALLENGE_DIR`\
+        Path to store ACME-related challenge responses.\
+        value: Any valid system path writable by the `nginx` user. \
+        default: `${NJS_ACME_DIR}/challenge/`
 
    - `NJS_ACME_ACCOUNT_PRIVATE_JWK`\
         Path to fetch/store the account private JWK.\
