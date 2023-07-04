@@ -158,7 +158,7 @@ export type PemTag =
  * @returns The converted PEM string
  */
 export function toPEM(
-  buffer: ArrayBufferView | ArrayBuffer,
+  buffer: string | Buffer | ArrayBufferView | ArrayBuffer,
   tag: PemTag
 ): string {
   /**

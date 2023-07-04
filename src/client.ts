@@ -1,5 +1,11 @@
 import { HttpClient } from './api'
-import { formatResponseError, getPemBodyAsB64u, readCsrDomainNames, retry, toPEM } from './utils'
+import {
+  formatResponseError,
+  getPemBodyAsB64u,
+  readCsrDomainNames,
+  retry,
+  toPEM,
+} from './utils'
 import OGCrypto from 'crypto'
 
 export interface ClientExternalAccountBindingOptions {
@@ -945,28 +951,40 @@ async function auto(
     'njs-acme: [auto] Parsing domains from Certificate Signing Request'
   )
 
-  const csrDomains = readCsrDomainNames(toPEM(opts.csr, 'CERTIFICATE REQUEST'));
-  ngx.log(ngx.INFO, `csrDomains=${JSON.stringify(csrDomains)}`)
-  const uniqueDomains = [csrDomains.commonName]
+  if (opts.csr === null) {
+    throw new Error('csr is required')
+  }
 
-  // Work around issue in x509.get_oid_value where altNames comes back as an Array in an Array, e.g.:
+  const csrDomains = readCsrDomainNames(toPEM(opts.csr, 'CERTIFICATE REQUEST'))
+
+  // Work around issue in x509.get_oid_value (called from readCsrDomainNames)
+  // where altNames comes back as an Array in an Array, e.g.:
   //   [[ 'hostname1', 'hostname2' ]]
   // We just want an Array:
   //   [ 'hostname1', 'hostname2' ]
+  const uniqueDomains = [csrDomains.commonName]
+  // Hacky stuff to make Typescript happy
+  const origAltNames = csrDomains.altNames as unknown as string[][]
   let altNames = csrDomains.altNames
   if (altNames && altNames[0] && altNames[0][0]) {
-    altNames = altNames[0]
+    altNames = origAltNames[0]
   }
 
-  for (const altName of altNames) {
-    if (uniqueDomains.indexOf(altName) === -1) {
-      uniqueDomains.push(altName)
+  if (altNames) {
+    for (const altName of altNames) {
+      if (uniqueDomains.indexOf(altName) === -1) {
+        uniqueDomains.push(altName)
+      }
     }
   }
 
   ngx.log(
     ngx.INFO,
-    `njs-acme: [auto] Resolved ${uniqueDomains.length} unique domains (${uniqueDomains.join(', ')}) from parsing the Certificate Signing Request`
+    `njs-acme: [auto] Resolved ${
+      uniqueDomains.length
+    } unique domains (${uniqueDomains.join(
+      ', '
+    )}) from parsing the Certificate Signing Request`
   )
 
   /**
