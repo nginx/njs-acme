@@ -4,6 +4,7 @@ import {
   RsaPublicJwk,
   EcdsaPublicJwk,
 } from './utils'
+import { Logger, LogLevel } from './logger'
 import { version } from '../package.json'
 import {
   AccountCreateRequest,
@@ -202,16 +203,12 @@ export class HttpClient {
   verify: boolean
 
   /**
-   * Determines whether to enable debug mode.
-   * @type {boolean}
-   */
-  debug: boolean
-
-  /**
    * The maximum number of retries allowed when encountering a bad nonce.
    * @type {number}
    */
   maxBadNonceRetries: number
+
+  private readonly log: Logger
 
   /**
    * Creates an instance of the ACME HTTP client.
@@ -239,8 +236,8 @@ export class HttpClient {
     this.jwk = null
     this.accountUrl = accountUrl
     this.verify = true
-    this.debug = false
     this.maxBadNonceRetries = 5
+    this.log = new Logger('http', LogLevel.Info)
   }
 
   /**
@@ -267,23 +264,9 @@ export class HttpClient {
     }
 
     /* Request */
-    if (this.debug) {
-      ngx.log(
-        ngx.INFO,
-        `njs-acme: [http] Sending a new request: ${method} ${url} ${JSON.stringify(
-          options
-        )}`
-      )
-    }
+    this.log.debug('Sending a new request:', method, url, options)
     const resp = await ngx.fetch(url, options)
-    if (this.debug) {
-      ngx.log(
-        ngx.INFO,
-        `njs-acme: [http] Got a response: ${
-          resp.status
-        } ${method} ${url} ${JSON.stringify(resp.headers)}`
-      )
-    }
+    this.log.debug('Got a response:', resp.status, method, url, resp.headers)
     return resp
   }
 
@@ -318,14 +301,8 @@ export class HttpClient {
       await this.getJwk()
     }
 
-    if (this.debug) {
-      ngx.log(
-        ngx.INFO,
-        `njs-acme: [http] Signing request with kid: ${kid}  nonce: ${nonce} jwt: ${JSON.stringify(
-          this.jwk
-        )}`
-      )
-    }
+    this.log.debug('Signing request with:', { kid, nonce, jwt: this.jwk })
+
     /* External account binding
 
             https://datatracker.ietf.org/doc/html/rfc8555#section-7.3.4
@@ -354,12 +331,7 @@ export class HttpClient {
 
     /* Sign body and send request */
     const data = await this.createSignedBody(url, payload, { nonce, kid })
-    if (this.debug) {
-      ngx.log(
-        ngx.INFO,
-        `njs-acme: [http] Signed request body: ${JSON.stringify(data)}`
-      )
-    }
+    this.log.debug('Signed request body:', data)
     const resp = await this.request(url, 'POST', JSON.stringify(data))
 
     if (resp.status === 400) {
@@ -369,9 +341,8 @@ export class HttpClient {
         nonce = resp.headers.get('replay-nonce') || null
         attempts += 1
 
-        ngx.log(
-          ngx.WARN,
-          `njs-acme: [http] Error response from server, retrying (${attempts}/${this.maxBadNonceRetries}) signed request to: ${url}`
+        this.log.warn(
+          `Error response from server, retrying (${attempts}/${this.maxBadNonceRetries}) signed request to: ${url}`
         )
         return this.signedRequest(
           url,
@@ -405,14 +376,7 @@ export class HttpClient {
     { includeJwsKid = true, includeExternalAccountBinding = false } = {}
   ): Promise<Response> {
     const kid = includeJwsKid ? this.getAccountUrl() : null
-    if (this.debug) {
-      ngx.log(
-        ngx.INFO,
-        `njs-acme: [http] Preparing a new api request kid=${kid}, payload=${JSON.stringify(
-          payload
-        )}`
-      )
-    }
+    this.log.debug('Preparing a new api request:', { kid, payload })
     const resp = await this.signedRequest(url, payload, {
       kid,
       includeExternalAccountBinding,
@@ -423,14 +387,14 @@ export class HttpClient {
       validStatusCodes.indexOf(resp.status) === -1
     ) {
       const b = await resp.json()
-      ngx.log(
-        ngx.WARN,
-        `njs-acme: [http] Received unexpected status code ${
-          resp.status
-        } for API request ${url}. Expected status codes: ${validStatusCodes.join(
-          ', '
-        )}. Body response: ${JSON.stringify(b)}`
+      this.log.warn(
+        `Received unexpected status code ${resp.status} for API request ${url}.`,
+        'Expected status codes:',
+        validStatusCodes,
+        'Body response:',
+        b
       )
+
       const e = formatResponseError(b)
       throw new Error(e)
     }
@@ -482,14 +446,7 @@ export class HttpClient {
         throw new Error('Attempting to read ACME directory returned no data')
       }
       this.directory = data
-      if (this.debug) {
-        ngx.log(
-          ngx.INFO,
-          `njs-acme: [http] Fetched directory: ${JSON.stringify(
-            this.directory
-          )}`
-        )
-      }
+      this.log.debug('Fetched directory:', this.directory)
     }
   }
 
@@ -504,21 +461,11 @@ export class HttpClient {
   async getJwk(): Promise<RsaPublicJwk | EcdsaPublicJwk> {
     // singleton
     if (!this.jwk) {
-      if (this.debug) {
-        ngx.log(
-          ngx.INFO,
-          'njs-acme: [http] Public JWK not set. Obtaining it from Account Private Key...'
-        )
-      }
+      this.log.debug(
+        'Public JWK not set. Obtaining it from Account Private Key...'
+      )
       this.jwk = await getPublicJwk(this.accountKey)
-      if (this.debug) {
-        ngx.log(
-          ngx.INFO,
-          `njs-acme: [http] Obtained Account Public JWK: ${JSON.stringify(
-            this.jwk
-          )}`
-        )
-      }
+      this.log.debug('Obtained Account Public JWK:', this.jwk)
     }
     return this.jwk
   }
@@ -534,10 +481,7 @@ export class HttpClient {
     const url = await this.getResourceUrl('newNonce')
     const resp = await this.request(url, 'HEAD')
     if (!resp.headers.get('replay-nonce')) {
-      ngx.log(
-        ngx.ERR,
-        'njs-acme: [http] No nonce from ACME provider. "replay-nonce" header found'
-      )
+      this.log.error('No nonce from ACME provider. "replay-nonce" header found')
       throw new Error('Failed to get nonce from ACME provider')
     }
     return resp.headers.get('replay-nonce')
@@ -553,9 +497,8 @@ export class HttpClient {
     await this.getDirectory()
 
     if (this.directory != null && !this.directory[resource]) {
-      ngx.log(
-        ngx.ERR,
-        `njs-acme: [http] Unable to locate API resource URL in ACME directory: "${resource}"`
+      this.log.error(
+        `Unable to locate API resource URL in ACME directory: "${resource}"`
       )
       throw new Error(
         `Unable to locate API resource URL in ACME directory: "${resource}"`
@@ -703,12 +646,7 @@ export class HttpClient {
       kid,
     })
 
-    if (this.debug) {
-      ngx.log(
-        ngx.INFO,
-        `njs-acme: [http] Prepared signed payload ${JSON.stringify(result)}`
-      )
-    }
+    this.log.debug('Prepared signed payload', result)
 
     let sign
     if (jwk.kty === 'EC') {
@@ -919,6 +857,6 @@ export class HttpClient {
    * @param {boolean} v - Whether to enable debug mode or not.
    */
   setDebug(v: boolean): void {
-    this.debug = v
+    this.log.minLevel = v ? LogLevel.Debug : LogLevel.Info
   }
 }
