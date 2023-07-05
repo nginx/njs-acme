@@ -1,4 +1,5 @@
 import { HttpClient } from './api'
+import { LogLevel, Logger } from './logger'
 import {
   formatResponseError,
   getPemBodyAsB64u,
@@ -256,6 +257,7 @@ export class AcmeClient {
     max: number | undefined
   }
   api: HttpClient
+  private log: Logger
 
   constructor(opts: ClientOptions) {
     // if (!Buffer.isBuffer(opts.accountKey)) {
@@ -269,6 +271,8 @@ export class AcmeClient {
       min: this.opts.backoffMin,
       max: this.opts.backoffMax,
     }
+
+    this.log = new Logger('client', LogLevel.Info)
 
     // FIXME accountKey - is a CryptoKey object not a PEM/string/Object...
     this.api = new HttpClient(
@@ -348,17 +352,14 @@ export class AcmeClient {
       this.getAccountUrl()
 
       /* Account URL exists */
-      ngx.log(ngx.INFO, 'njs-acme: [client] Account URL exists, updating it...')
+      this.log.info('Account URL exists, updating it...')
       return await this.updateAccount(data)
     } catch (e) {
       const resp = await this.api.createAccount(data)
 
       /* HTTP 200: Account exists */
       if (resp.status === 200) {
-        ngx.log(
-          ngx.INFO,
-          'njs-acme: [client] Account already exists (HTTP 200), updating it...'
-        )
+        this.log.info('Account already exists (HTTP 200), updating it...')
         return await this.updateAccount(data)
       }
       return (await resp.json()) as Promise<Record<string, unknown>>
@@ -549,7 +550,7 @@ export class AcmeClient {
     try {
       resp = await this.api.finalizeOrder(order.finalize, data)
     } catch (e) {
-      ngx.log(ngx.WARN, `njs-acme: [client] finalize order failed: ${e}`)
+      this.log.warn('finalize order failed:', e)
       throw e
     }
     /* Add URL to response */
@@ -725,10 +726,7 @@ export class AcmeClient {
 
       /* Verify status */
       const respData = (await resp.json()) as Record<string, string>
-      ngx.log(
-        ngx.INFO,
-        `njs-acme: [client] Item has status: ${respData.status}`
-      )
+      this.log.info('Item has status:', respData.status)
 
       if (invalidStates.includes(respData.status)) {
         abort()
@@ -742,10 +740,7 @@ export class AcmeClient {
       throw new Error(`Unexpected item status: ${respData.status}`)
     }
 
-    ngx.log(
-      ngx.INFO,
-      `njs-acme: [client] Waiting for valid status from: ${item.url} ${this.backoffOpts}`
-    )
+    this.log.info('Waiting for valid status from', item.url, this.backoffOpts)
     return retry(verifyFn, this.backoffOpts) as Promise<Record<string, unknown>>
   }
 
@@ -887,6 +882,16 @@ export class AcmeClient {
   auto(opts: ClientAutoOptions): Promise<NjsByteString> {
     return auto(this, opts)
   }
+
+  /** how verbose these logs will be */
+  get minLevel(): LogLevel {
+    return this.log.minLevel
+  }
+
+  /** controls how verbose these logs will be. Does not affect the level of {@link AcmeClient.api}. */
+  set minLevel(v: LogLevel) {
+    this.log.minLevel = v
+  }
 }
 
 const autoDefaultOpts: ClientAutoOptions = {
@@ -915,6 +920,7 @@ async function auto(
   userOpts: ClientAutoOptions
 ): Promise<NjsByteString> {
   const opts = Object.assign({}, autoDefaultOpts, userOpts)
+  const log = new Logger('auto', client.minLevel)
   const accountPayload: Record<string, unknown> = {
     termsOfServiceAgreed: opts.termsOfServiceAgreed,
   }
@@ -930,26 +936,20 @@ async function auto(
   /**
    * Register account
    */
-  ngx.log(ngx.INFO, 'njs-acme: [auto] Checking account')
+  log.info('Checking account')
 
   try {
     client.getAccountUrl()
-    ngx.log(
-      ngx.INFO,
-      'njs-acme: [auto] Account URL already exists, skipping account registration'
-    )
+    log.info('Account URL already exists, skipping account registration')
   } catch (e) {
-    ngx.log(ngx.INFO, 'njs-acme: [auto] Registering account')
+    log.info('Registering account')
     await client.createAccount(accountPayload)
   }
 
   /**
    * Parse domains from CSR
    */
-  ngx.log(
-    ngx.INFO,
-    'njs-acme: [auto] Parsing domains from Certificate Signing Request'
-  )
+  log.info('Parsing domains from Certificate Signing Request')
 
   if (opts.csr === null) {
     throw new Error('csr is required')
@@ -978,11 +978,8 @@ async function auto(
     }
   }
 
-  ngx.log(
-    ngx.INFO,
-    `njs-acme: [auto] Resolved ${
-      uniqueDomains.length
-    } unique domains (${uniqueDomains.join(
+  log.info(
+    `Resolved ${uniqueDomains.length} unique domains (${uniqueDomains.join(
       ', '
     )}) from parsing the Certificate Signing Request`
   )
@@ -995,15 +992,12 @@ async function auto(
   }
   const order = await client.createOrder(orderPayload)
   const authorizations = await client.getAuthorizations(order)
-  ngx.log(ngx.INFO, `njs-acme: [auto] Placed certificate order successfully`)
+  log.info(`Placed certificate order successfully`)
 
   /**
    * Resolve and satisfy challenges
    */
-  ngx.log(
-    ngx.INFO,
-    'njs-acme: [auto] Resolving and satisfying authorization challenges'
-  )
+  log.info('Resolving and satisfying authorization challenges')
 
   const challengePromises = authorizations.map(async (authz: Authorization) => {
     const d = authz.identifier?.value
@@ -1011,9 +1005,8 @@ async function auto(
 
     /* Skip authz that already has valid status */
     if (authz.status === 'valid') {
-      ngx.log(
-        ngx.INFO,
-        `njs-acme: [auto] [${d}] Authorization already has valid status, no need to complete challenges`
+      log.info(
+        `[${d}] Authorization already has valid status, no need to complete challenges`
       )
       return
     }
@@ -1037,9 +1030,8 @@ async function auto(
         )
       }
 
-      ngx.log(
-        ngx.INFO,
-        `njs-acme: [auto] [${d}] Found ${authz.challenges.length} challenges, selected type: ${challenge.type}`
+      log.info(
+        `[${d}] Found ${authz.challenges.length} challenges, selected type: ${challenge.type}`
       )
 
       /* Trigger challengeCreateFn() */
@@ -1051,9 +1043,8 @@ async function auto(
         await opts.challengeCreateFn(authz, challenge, keyAuthorization)
 
         /* Complete challenge and wait for valid status */
-        ngx.log(
-          ngx.INFO,
-          `njs-acme: [auto] [${d}] Completing challenge with ACME provider and waiting for valid status`
+        log.info(
+          `[${d}] Completing challenge with ACME provider and waiting for valid status`
         )
         await client.completeChallenge(challenge)
         challengeCompleted = true
@@ -1064,31 +1055,22 @@ async function auto(
         try {
           await opts.challengeRemoveFn(authz, challenge, keyAuthorization)
         } catch (e) {
-          ngx.log(
-            ngx.INFO,
-            `njs-acme: [auto] [${d}] challengeRemoveFn threw error: ${
-              (e as Error).message
-            }`
+          log.info(
+            `[${d}] challengeRemoveFn threw error: ${(e as Error).message}`
           )
         }
       }
     } catch (e: unknown) {
       /* Deactivate pending authz when unable to complete challenge */
       if (!challengeCompleted) {
-        ngx.log(
-          ngx.INFO,
-          `njs-acme: [auto] [${d}] Unable to complete challenge: ${
-            (e as Error).message
-          }`
-        )
+        log.info(`[${d}] Unable to complete challenge: ${(e as Error).message}`)
 
         try {
           await client.deactivateAuthorization(authz)
         } catch (f: unknown) {
           /* Suppress deactivateAuthorization() errors */
-          ngx.log(
-            ngx.INFO,
-            `njs-acme: [auto] [${d}] Authorization deactivation threw error: ${
+          log.info(
+            `[${d}] Authorization deactivation threw error: ${
               (f as Error).message
             }`
           )
@@ -1099,7 +1081,7 @@ async function auto(
     }
   })
 
-  ngx.log(ngx.INFO, 'njs-acme: [auto] Waiting for challenge valid status')
+  log.info('Waiting for challenge valid status')
   await Promise.all(challengePromises)
 
   if (!opts.csr) {
@@ -1109,7 +1091,7 @@ async function auto(
   /**
    * Finalize order and download certificate
    */
-  ngx.log(ngx.INFO, 'njs-acme: [auto] Finalize order and download certificate')
+  log.info('Finalize order and download certificate')
   const finalized = await client.finalizeOrder(order, opts.csr)
   const certData = await client.getCertificate(finalized, opts.preferredChain)
   return certData
