@@ -12,6 +12,6 @@ module.exports = {
   ],
   spec: [
     'integration-tests/**/*.test.ts',
-    'src/**/*.test.ts',
+    'unit-tests/**/*.test.ts',
   ],
 }

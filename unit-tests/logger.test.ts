@@ -1,9 +1,6 @@
-/// tell tsc how to process our tests
-/// <reference types="node" />
-/// <reference types="njs-types" />
 import assert from 'assert'
 import { describe, it } from 'mocha'
-import { LogLevel, Logger } from './logger'
+import { LogLevel, Logger } from '../src/logger'
 
 describe('Logger', () => {
   it('adds a prefix', () => {
