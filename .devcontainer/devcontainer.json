@@ -12,7 +12,12 @@
         "ms-vsliveshare.vsliveshare",
         "ms-azuretools.vscode-docker",
         "esbenp.prettier-vscode"
-      ]
+      ],
+      "settings": {
+        "[typescript]":{
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        }
+      }
     }
   }
 }
