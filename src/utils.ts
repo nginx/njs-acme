@@ -158,7 +158,7 @@ export type PemTag =
  * @returns The converted PEM string
  */
 export function toPEM(
-  buffer: ArrayBufferView | ArrayBuffer,
+  buffer: string | Buffer | ArrayBufferView | ArrayBuffer,
   tag: PemTag
 ): string {
   /**
@@ -749,6 +749,7 @@ export function readCsrDomainNames(csrPem: string | Buffer): {
     csrPem = csrPem.toString()
   }
   const csr = x509.parse_pem_cert(csrPem)
+
   return {
     commonName: x509.get_oid_value(csr, '2.5.4.3'),
     altNames: x509.get_oid_value(csr, '2.5.29.17'),

@@ -1,5 +1,5 @@
 {
-  "name": "njs-acme-experemental",
+  "name": "njs-acme",
   "version": "1.0.0",
   "description": "## How do I use this template?",
   "main": "dist/acme.js",
@@ -9,15 +9,15 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nginxinc/njs-acme-experemental.git"
+    "url": "git+https://github.com/nginxinc/njs-acme.git"
   },
   "keywords": [],
   "author": "",
   "license": "APACHE-2.0",
   "bugs": {
-    "url": "https://github.com/nginxinc/njs-acme-experemental/issues"
+    "url": "https://github.com/nginxinc/njs-acme/issues"
   },
-  "homepage": "https://github.com/nginxinc/njs-acme-experemental#readme",
+  "homepage": "https://github.com/nginxinc/njs-acme#readme",
   "engines": {
     "node": ">= 14.15"
   },
