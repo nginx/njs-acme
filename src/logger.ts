@@ -1,4 +1,10 @@
 export enum LogLevel {
+  /**
+   * Debug is a synthetic log level to control log verbosity.
+   *
+   * ngx.INFO is the lowest level that njs supports, but often there are logs
+   * only useful during the development process.
+   */
   Debug = 1,
   Info,
   Warn,
@@ -65,6 +71,12 @@ export class Logger {
     this.ngx.log(this.logLevelMap[level], message)
   }
 
+  /**
+   * debug is a synthetic log level to control verbosity, use this for logs that
+   * are useful only during the development process.
+   *
+   * Will appear in logs as ngx.INFO.
+   * */
   debug(...args: unknown[]): void {
     this.log(LogLevel.Debug, args)
   }
