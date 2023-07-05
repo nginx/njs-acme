@@ -153,7 +153,10 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
         log.info(
           `Writing challenge file so nginx can serve it via .well-known/acme-challenge/${challenge.token}`
         )
-
+        ngx.log(
+          ngx.INFO,
+          `njs-acme: [auto] Writing challenge file so nginx can serve it via ${challengePath}/${challenge.token}`
+        )
         const path = joinPaths(challengePath, challenge.token)
         fs.writeFileSync(path, keyAuthorization)
       },
