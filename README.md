@@ -82,16 +82,14 @@ There are a few pieces that are required to be present in your `nginx.conf` file
 
 ### `server` Section
 * Set the hostname or hostnames (space-separated) to generate the certificate.
+This may also be the environment variable `NJS_ACME_SERVER_NAMES`.
   ```nginx
   set $njs_acme_server_names proxy.nginx.com;
   ```
-* Set your email address to use to configure your ACME account.
+* Set your email address to use to configure your ACME account. This may also
+be the environment variable `NJS_ACME_ACCOUNT_EMAIL`.
   ```nginx
   set $njs_acme_account_email test@example.com;
-  ```
-* Set the directory to store challenges. This is also used in a `location{}` block below.
-  ```nginx
-  set $njs_acme_challenge_dir /etc/nginx/njs-acme/challenge;
   ```
 * Set and use variables to hold the certificate and key paths using Javascript.
   ```nginx
@@ -102,11 +100,10 @@ There are a few pieces that are required to be present in your `nginx.conf` file
   ssl_certificate_key $dynamic_ssl_key;
   ```
 ### `location` Blocks
-* Location to handle ACME challenge requests. `$njs_acme_challenge_dir` is used here.
+* Location to handle ACME challenge requests.
   ```nginx
   location ^~ /.well-known/acme-challenge/ {
-    default_type "text/plain";
-    root $njs_acme_challenge_dir;
+    js_content acme.challengeResponse;
   }
   ```
 * Location, that when requested, inspects the stored certificate (if present) and will request a new certificate if necessary. The included `docker-compose.yml` shows how to use a `healthcheck:` configuration for the NGINX service to periodically request this endpoint.
