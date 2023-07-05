@@ -851,12 +851,12 @@ export class HttpClient {
     this.verify = v
   }
 
-  /**
-   * Sets the debug mode for the HTTP client.
-   *
-   * @param {boolean} v - Whether to enable debug mode or not.
-   */
-  setDebug(v: boolean): void {
-    this.log.minLevel = v ? LogLevel.Debug : LogLevel.Info
+  /** how verbose these logs will be */
+  get minLevel(): LogLevel {
+    return this.log.minLevel
+  }
+  /** controls how verbose these logs will be */
+  set minLevel(v: LogLevel) {
+    this.log.minLevel = v
   }
 }

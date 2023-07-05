@@ -15,6 +15,7 @@ import {
 import { HttpClient } from './api'
 import { AcmeClient } from './client'
 import fs from 'fs'
+import { LogLevel } from './logger'
 
 const KEY_SUFFIX = '.key'
 const CERTIFICATE_SUFFIX = '.crt'
@@ -32,7 +33,7 @@ async function clientNewAccount(r: NginxHTTPRequest): Promise<void> {
     accountKey: accountKey,
   })
   // display more logs
-  client.api.setDebug(true)
+  client.api.minLevel = LogLevel.Debug
   // do not validate ACME provider cert
   client.api.setVerify(acmeVerifyProviderHTTPS(r))
 
@@ -107,7 +108,7 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
       directoryUrl: acmeDirectoryURI(r),
       accountKey: accountKey,
     })
-    // client.api.setDebug(true);
+    // client.api.minLevel = LogLevel.Debug; // display more logs
     client.api.setVerify(acmeVerifyProviderHTTPS(r))
 
     // Create a new CSR
@@ -215,7 +216,7 @@ async function acmeNewAccount(r: NginxHTTPRequest): Promise<void> {
   // /* Create a new ACME account */
   const client = new HttpClient(acmeDirectoryURI(r), keys.privateKey)
 
-  client.setDebug(true)
+  client.minLevel = LogLevel.Debug
   client.setVerify(acmeVerifyProviderHTTPS(r))
 
   // Get Terms Of Service link from the ACME provider

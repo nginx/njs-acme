@@ -257,7 +257,7 @@ async function clientAutoMode(r: NginxHTTPRequest) {
         directoryUrl: DIRECTORY_URL,
         accountKey: accountKey
     });
-    // client.api.setDebug(true);
+    client.api.minLevel = LogLevel.Debug; // dispay more logs
     client.api.setVerify(false);
     const email = r.variables.njs_acme_account_email || process.env.NJS_ACME_ACCOUNT_EMAIL
     if (email.length == 0) {
