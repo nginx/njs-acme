@@ -38,16 +38,16 @@ export class Logger {
   private readonly logLevelMap: Record<LogLevel, number>
 
   /**
-   * @param module preprended to every log message
+   * @param module preprended to every log message, if non-empty
    * @param minLevel lowest level to log, anything below will be ignored
    * @param ngx log sink, intended for testing purposes
    */
   constructor(
-    module: string,
+    module = '',
     public minLevel: LogLevel = LogLevel.Info,
     private ngx: NgxLog = ngx
   ) {
-    this.prefix = `njs-acme: [${module}]`
+    this.prefix = module ? `njs-acme: [${module}]` : 'njs-acme:'
     this.logLevelMap = {
       [LogLevel.Debug]: ngx.INFO,
       [LogLevel.Info]: ngx.INFO,

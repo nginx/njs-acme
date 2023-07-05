@@ -15,10 +15,11 @@ import {
 import { HttpClient } from './api'
 import { AcmeClient } from './client'
 import fs from 'fs'
-import { LogLevel } from './logger'
+import { LogLevel, Logger } from './logger'
 
 const KEY_SUFFIX = '.key'
 const CERTIFICATE_SUFFIX = '.crt'
+const log = new Logger()
 
 /**
  * Using AcmeClient to create a new account. It creates an account key if it doesn't exists
@@ -45,7 +46,7 @@ async function clientNewAccount(r: NginxHTTPRequest): Promise<void> {
     return r.return(200, JSON.stringify(account))
   } catch (e) {
     const errMsg = `Error creating ACME account. Error=${e}`
-    ngx.log(ngx.ERR, errMsg)
+    log.error(errMsg)
     return r.return(500, errMsg)
   }
 }
@@ -57,6 +58,7 @@ async function clientNewAccount(r: NginxHTTPRequest): Promise<void> {
  * @returns void
  */
 async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
+  const log = new Logger('auto')
   const prefix = acmeDir(r)
   const serverNames = acmeServerNames(r)
 
@@ -127,7 +129,7 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
     )) as ArrayBuffer
     pkeyPem = toPEM(privKey, 'PRIVATE KEY')
     fs.writeFileSync(pkeyPath, pkeyPem)
-    ngx.log(ngx.INFO, `njs-acme: [auto] Wrote Private key to ${pkeyPath}`)
+    log.info(`Wrote Private key to ${pkeyPath}`)
 
     // this is the only variable that has to be set in nginx.conf
     const challengePath = r.variables.njs_acme_challenge_dir
@@ -138,10 +140,7 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
         "Nginx variable 'njs_acme_challenge_dir' must be set"
       )
     }
-    ngx.log(
-      ngx.INFO,
-      `njs-acme: [auto] Issuing a new Certificate: ${JSON.stringify(params)}`
-    )
+    log.info('Issuing a new Certificate:', params)
     const fullChallengePath = joinPaths(
       challengePath,
       '.well-known/acme-challenge'
@@ -149,10 +148,10 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
     try {
       fs.mkdirSync(fullChallengePath, { recursive: true })
     } catch (e) {
-      ngx.log(
-        ngx.ERR,
+      log.error(
         `Error creating directory to store challenges at ${fullChallengePath}. Ensure the ${challengePath} directory is writable by the nginx user.`
       )
+
       return r.return(500, 'Cannot create challenge directory')
     }
 
@@ -161,18 +160,11 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
       email: email,
       termsOfServiceAgreed: true,
       challengeCreateFn: async (authz, challenge, keyAuthorization) => {
-        ngx.log(
-          ngx.INFO,
-          `njs-acme: [auto] Challenge Create (authz='${JSON.stringify(
-            authz
-          )}', challenge='${JSON.stringify(
-            challenge
-          )}', keyAuthorization='${keyAuthorization}')`
+        log.info('Challenge Create', { authz, challenge, keyAuthorization })
+        log.info(
+          `Writing challenge file so nginx can serve it via .well-known/acme-challenge/${challenge.token}`
         )
-        ngx.log(
-          ngx.INFO,
-          `njs-acme: [auto] Writing challenge file so nginx can serve it via .well-known/acme-challenge/${challenge.token}`
-        )
+
         const path = joinPaths(fullChallengePath, challenge.token)
         fs.writeFileSync(path, keyAuthorization)
       },
@@ -180,18 +172,15 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
         const path = joinPaths(fullChallengePath, challenge.token)
         try {
           fs.unlinkSync(path)
-          ngx.log(ngx.INFO, `njs-acme: [auto] removed challenge ${path}`)
+          log.info(`removed challenge ${path}`)
         } catch (e) {
-          ngx.log(
-            ngx.ERR,
-            `njs-acme: [auto] failed to remove challenge ${path}`
-          )
+          log.error(`failed to remove challenge ${path}`)
         }
       },
     })
     certInfo = await readCertificateInfo(certificatePem)
     fs.writeFileSync(certPath, certificatePem)
-    r.log(`njs-acme: wrote certificate to ${certPath}`)
+    log.info(`wrote certificate to ${certPath}`)
   }
 
   const info = {
@@ -208,7 +197,7 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
  * @returns
  */
 async function acmeNewAccount(r: NginxHTTPRequest): Promise<void> {
-  ngx.log(ngx.ERR, `VERIFY_PROVIDER_HTTPS: ${acmeVerifyProviderHTTPS(r)}`)
+  log.error('VERIFY_PROVIDER_HTTPS:', acmeVerifyProviderHTTPS(r))
 
   /* Generate a new RSA key pair for ACME account */
   const keys = (await generateKey()) as Required<CryptoKeyPair>
@@ -221,7 +210,7 @@ async function acmeNewAccount(r: NginxHTTPRequest): Promise<void> {
 
   // Get Terms Of Service link from the ACME provider
   const tos = await client.getMetaField('termsOfService')
-  ngx.log(ngx.INFO, `termsOfService: ${tos}`)
+  log.info(`termsOfService: ${tos}`)
   // obtain a resource URL
   const resourceUrl: string = await client.getResourceUrl('newAccount')
   const payload = {
@@ -281,16 +270,16 @@ function js_cert(r: NginxHTTPRequest): string {
     serverNames[0].toLowerCase(), // filename is the commonName (first serverName)
     CERTIFICATE_SUFFIX
   )
-  // ngx.log(ngx.INFO, `njs-acme: Loaded cert for ${r.variables.ssl_server_name} from path: ${path}`);
+  // log.info(`Loaded cert for ${r.variables.ssl_server_name} from path: ${path}`);
   if (data.length == 0) {
-    r.log(
-      `njs-acme: seems there is no cert for ${r.variables.ssl_server_name} from path: ${path}`
+    log.info(
+      `seems there is no cert for ${r.variables.ssl_server_name} from path: ${path}`
     )
     /*
       // FIXME: is there a way to send a subrequest so we kick in auto mode to issue a new one?
       r.subrequest('http://localhost:8000/acme/auto',
           {detached: true, method: 'GET', body: undefined});
-      r.log(`njs-acme: notified /acme/auto`);
+      log.info('notified /acme/auto');
     */
   }
   return path
@@ -309,7 +298,7 @@ function js_key(r: NginxHTTPRequest): string {
     serverNames[0].toLowerCase(), // filename is the commonName (first serverName)
     KEY_SUFFIX
   )
-  // r.log(`njs-acme: loaded key for ${r.variables.ssl_server_name} from path: ${path}`);
+  // log.info(`loaded key for ${r.variables.ssl_server_name} from path: ${path}`);
   return path
 }
 

@@ -14,6 +14,17 @@ describe('Logger', () => {
     ])
   })
 
+  it('omits empty modules from the prefix', () => {
+    const ngx = new FakeNGX()
+    const log = new Logger('', LogLevel.Info, ngx)
+
+    log.info('message')
+
+    assert.deepEqual(ngx.logs, [
+      { level: ngx.INFO, message: 'njs-acme: message' },
+    ])
+  })
+
   it("maps our four log levels to ngx's three log levels", () => {
     const ngx = new FakeNGX()
     const log = new Logger('t', LogLevel.Debug, ngx)
