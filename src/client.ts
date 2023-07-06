@@ -159,21 +159,28 @@ export interface ClientOptions {
   backoffMax?: number
 }
 
-export interface ClientAutoOptions {
-  csr: Buffer | string | null
-  challengeCreateFn: (
-    authz: Authorization,
-    challenge: Challenge,
-    keyAuthorization: string
-  ) => Promise<void>
-  challengeRemoveFn: (
-    authz: Authorization,
-    challenge: Challenge,
-    keyAuthorization: string
-  ) => Promise<void>
-  email?: string
-  termsOfServiceAgreed?: boolean
-  challengePriority?: string[]
+const autoDefaultOpts = {
+  challengePriority: ['http-01'],
+  termsOfServiceAgreed: false,
+  challengeCreateFn: async (
+    _authz: Authorization,
+    _challenge: Challenge,
+    _keyAuthorization: string
+  ): Promise<void> => {
+    throw new Error('Missing challengeCreateFn()')
+  },
+  challengeRemoveFn: async (
+    _authz: Authorization,
+    _challenge: Challenge,
+    _keyAuthorization: string
+  ): Promise<void> => {
+    throw new Error('Missing challengeRemoveFn()')
+  },
+}
+
+export interface ClientAutoOptions extends Partial<typeof autoDefaultOpts> {
+  csr: Buffer | string
+  email: string
   preferredChain?: string
 }
 
@@ -702,7 +709,7 @@ export class AcmeClient {
    * await client.waitForValidStatus(challenge);
    * ```
    *
-   * @example Wait for valid authoriation status
+   * @example Wait for valid authorization status
    * ```js
    * const authz = { ... };
    * await client.waitForValidStatus(authz);
@@ -894,20 +901,6 @@ export class AcmeClient {
   }
 }
 
-const autoDefaultOpts: ClientAutoOptions = {
-  csr: null,
-  email: undefined,
-  preferredChain: undefined,
-  termsOfServiceAgreed: false,
-  challengePriority: ['http-01'],
-  challengeCreateFn: async () => {
-    throw new Error('Missing challengeCreateFn()')
-  },
-  challengeRemoveFn: async () => {
-    throw new Error('Missing challengeRemoveFn()')
-  },
-}
-
 /**
  * ACME client auto mode
  *
@@ -919,7 +912,7 @@ async function auto(
   client: AcmeClient,
   userOpts: ClientAutoOptions
 ): Promise<NjsByteString> {
-  const opts = Object.assign({}, autoDefaultOpts, userOpts)
+  const opts = { ...autoDefaultOpts, ...userOpts }
   const log = new Logger('auto', client.minLevel)
   const accountPayload: Record<string, unknown> = {
     termsOfServiceAgreed: opts.termsOfServiceAgreed,
@@ -1015,8 +1008,8 @@ async function auto(
       /* Select challenge based on priority */
       const challenge = authz.challenges
         ?.sort((a: Challenge, b: Challenge) => {
-          const aidx = opts.challengePriority?.indexOf(a.type as string) || -1
-          const bidx = opts.challengePriority?.indexOf(b.type as string) || -1
+          const aidx = opts.challengePriority.indexOf(a.type)
+          const bidx = opts.challengePriority.indexOf(b.type)
 
           if (aidx === -1) return 1
           if (bidx === -1) return -1
