@@ -36,6 +36,7 @@ type NgxLog = Pick<NgxObject, 'INFO' | 'WARN' | 'ERR' | 'log'>
 export class Logger {
   private prefix: string
   private readonly logLevelMap: Record<LogLevel, number>
+  private readonly ngx: NgxLog
 
   /**
    * @param module preprended to every log message, if non-empty
@@ -45,14 +46,17 @@ export class Logger {
   constructor(
     module = '',
     public minLevel: LogLevel = LogLevel.Info,
-    private ngx: NgxLog = ngx
+    base?: NgxLog
   ) {
+    // the global `ngx` object is late bound, and undefined if we use it as a
+    // default parameter
+    this.ngx = base ?? ngx
     this.prefix = module ? `njs-acme: [${module}]` : 'njs-acme:'
     this.logLevelMap = {
-      [LogLevel.Debug]: ngx.INFO,
-      [LogLevel.Info]: ngx.INFO,
-      [LogLevel.Warn]: ngx.WARN,
-      [LogLevel.Error]: ngx.ERR,
+      [LogLevel.Debug]: this.ngx.INFO,
+      [LogLevel.Info]: this.ngx.INFO,
+      [LogLevel.Warn]: this.ngx.WARN,
+      [LogLevel.Error]: this.ngx.ERR,
     }
   }
 
