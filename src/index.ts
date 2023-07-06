@@ -324,9 +324,30 @@ function read_cert_or_key(prefix: string, domain: string, suffix: string) {
  */
 async function challengeResponse(r: NginxHTTPRequest): Promise<void> {
   const challengeUriPrefix = '/.well-known/acme-challenge/'
+
+  // Only support GET requests
+  if (r.method !== 'GET') {
+    return r.return(400, 'Bad Request')
+  }
+
+  // Here is the challenge token spec:
+  // https://datatracker.ietf.org/doc/html/draft-ietf-acme-acme-07#section-8.3
+  // - greater than 128 bits or ~22 base-64 encoded characters.
+  //   Let's Encrypt uses a 43-character string.
+  // - base64url characters only
+
+  // Ensure we're not given a token that is too long (128 chars to be future-proof)
+  if (r.uri.length > 128 + challengeUriPrefix.length) {
+    return r.return(400, 'Bad Request')
+  }
+
+  // Ensure this handler is only receiving /.well-known/acme-challenge/
+  // requests, and not other requests through some kind of configuration
+  // mistake.
   if (!r.uri.startsWith(challengeUriPrefix)) {
     return r.return(400, 'Bad Request')
   }
+
   const token = r.uri.substring(challengeUriPrefix.length)
 
   // Token must only contain base64url chars
