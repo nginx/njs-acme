@@ -84,12 +84,16 @@ There are a few pieces that are required to be present in your `nginx.conf` file
 * Set the hostname or hostnames (space-separated) to generate the certificate.
 This may also be the environment variable `NJS_ACME_SERVER_NAMES`.
   ```nginx
-  set $njs_acme_server_names proxy.nginx.com;
+  js_var $njs_acme_server_names proxy.nginx.com;
   ```
 * Set your email address to use to configure your ACME account. This may also
 be the environment variable `NJS_ACME_ACCOUNT_EMAIL`.
   ```nginx
-  set $njs_acme_account_email test@example.com;
+  js_var $njs_acme_account_email test@example.com;
+  ```
+* Set the directory to store challenges. This is also used in a `location{}` block below.
+  ```nginx
+  js_var $njs_acme_challenge_dir /etc/nginx/njs-acme/challenge;
   ```
 * Set and use variables to hold the certificate and key paths using Javascript.
   ```nginx
