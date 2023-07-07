@@ -334,4 +334,6 @@ export default {
   clientNewAccount,
   clientAutoMode,
   createCsrHandler,
+  LogLevel,
+  Logger
 }
