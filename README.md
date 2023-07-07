@@ -250,79 +250,138 @@ The `clientAutoMode` exported function is a reference implementation of the `js_
  * @param {NginxHTTPRequest} r Incoming request
  * @returns void
  */
-async function clientAutoMode(r: NginxHTTPRequest) {
-    const accountKey = await readOrCreateAccountKey(NJS_ACME_ACCOUNT_PRIVATE_JWK);
-    // /* Create a new ACME account */
-    let client = new AcmeClient({
-        directoryUrl: DIRECTORY_URL,
-        accountKey: accountKey
-    });
-    // client.api.setDebug(true);
-    client.api.setVerify(false);
-    const email = r.variables.njs_acme_account_email || process.env.NJS_ACME_ACCOUNT_EMAIL
-    if (email.length == 0) {
-        r.return(500,"Nginx variable 'njs_acme_account_email' or 'NJS_ACME_ACCOUNT_EMAIL' environment variable must be set")
-    }
-    // create a new CSR
-    const commonName = r.variables.server_name?.toLowerCase() || r.variables.njs_acme_server_name
+async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
+  const log = new Logger('auto')
+  const prefix = acmeDir(r)
+  const serverNames = acmeServerNames(r)
 
+  const commonName = serverNames[0]
+  const pkeyPath = joinPaths(prefix, commonName + KEY_SUFFIX)
+  const csrPath = joinPaths(prefix, commonName + '.csr')
+  const certPath = joinPaths(prefix, commonName + CERTIFICATE_SUFFIX)
+
+  let email
+  try {
+    email = getVariable(r, 'njs_acme_account_email')
+  } catch {
+    return r.return(
+      500,
+      "Nginx variable 'njs_acme_account_email' or 'NJS_ACME_ACCOUNT_EMAIL' environment variable must be set"
+    )
+  }
+
+  let certificatePem
+  let pkeyPem
+  let renewCertificate = false
+  let certInfo
+  try {
+    const certData = fs.readFileSync(certPath, 'utf8')
+    const privateKeyData = fs.readFileSync(pkeyPath, 'utf8')
+
+    certInfo = await readCertificateInfo(certData)
+    // Calculate the date 30 days before the certificate expiration
+    const renewalThreshold = new Date(certInfo.notAfter as string)
+    renewalThreshold.setDate(renewalThreshold.getDate() - 30)
+
+    const currentDate = new Date()
+    if (currentDate > renewalThreshold) {
+      renewCertificate = true
+    } else {
+      certificatePem = certData
+      pkeyPem = privateKeyData
+    }
+  } catch {
+    renewCertificate = true
+  }
+
+  if (renewCertificate) {
+    const accountKey = await readOrCreateAccountKey(
+      acmeAccountPrivateJWKPath(r)
+    )
+    // Create a new ACME client
+    const client = new AcmeClient({
+      directoryUrl: acmeDirectoryURI(r),
+      accountKey: accountKey,
+    })
+    // client.api.minLevel = LogLevel.Debug; // display more logs
+    client.api.setVerify(acmeVerifyProviderHTTPS(r))
+
+    // Create a new CSR
     const params = {
-        altNames: [commonName],
-        commonName: commonName,
-        // state: "WA",
-        // country: "US",
-        // organizationUnit: "NGINX",
-        emailAddress: email,
+      altNames: serverNames.length > 1 ? serverNames.slice(1) : [],
+      commonName: commonName,
+      emailAddress: email,
     }
 
-    const result = await createCsr(params);
-    const pemExported = toPEM(result.pkcs10Ber, "CERTIFICATE REQUEST");
+    const result = await createCsr(params)
+    fs.writeFileSync(csrPath, toPEM(result.pkcs10Ber, 'CERTIFICATE REQUEST'))
 
-    r.log(`njs-acme: [auto] Issuing a new Certificate: ${JSON.stringify(params)}`);
+    const privKey = (await crypto.subtle.exportKey(
+      'pkcs8',
+      result.keys.privateKey
+    )) as ArrayBuffer
+    pkeyPem = toPEM(privKey, 'PRIVATE KEY')
+    fs.writeFileSync(pkeyPath, pkeyPem)
+    log.info(`Wrote Private key to ${pkeyPath}`)
 
-    const prefix = r.variables.njs_acme_dir || NJS_ACME_DIR;
+    // this is the only variable that has to be set in nginx.conf
+    const challengePath = r.variables.njs_acme_challenge_dir
 
-    const privKey = await crypto.subtle.exportKey("pkcs8", result.keys.privateKey);
-    const pkeyPath = prefix + commonName + KEY_SUFFIX;
-    const pkeyPem = toPEM(privKey, "PRIVATE KEY");
-    fs.writeFileSync(pkeyPath, pkeyPem, 'utf-8');
-    r.log(`njs-acme: [auto] Wrote Private key to ${pkeyPath}`);
-
-    const challengePath = r.variables.njs_acme_challenge_dir!;
-    if (challengePath === undefined || challengePath.length == 0) {
-        r.return(500,"Nginx variable 'njs_acme_challenge_dir' must be set");
+    if (challengePath === undefined || challengePath.length === 0) {
+      return r.return(
+        500,
+        "Nginx variable 'njs_acme_challenge_dir' must be set"
+      )
     }
-    const certificatePem = await client.auto({
-        csr: result.pkcs10Ber,
-        email: email,
-        termsOfServiceAgreed: true,
-        challengeCreateFn: async (authz, challenge, keyAuthorization) => {
-            ngx.log(ngx.INFO, `njs-acme: [auto] Challenge Create (authz='${JSON.stringify(authz)}', challenge='${JSON.stringify(challenge)}', keyAuthorization='${keyAuthorization}')`);
-            ngx.log(ngx.INFO, `njs-acme: [auto] Writing challenge file so nginx can serve it via .well-known/acme-challenge/${challenge.token}`);
-            const path = `${challengePath}/.well-known/acme-challenge/${challenge.token}`;
-            fs.writeFileSync(path, keyAuthorization, 'utf8');
-        },
-        challengeRemoveFn: async (authz, challenge, keyAuthorization) => {
-            const path = `${challengePath}/.well-known/acme-challenge/${challenge.token}`;
-            try {
-                fs.unlinkSync(path);
-                ngx.log(ngx.INFO, `njs-acme: [auto] removed challenge ${path}`);
-            } catch (e) {
-                ngx.log(ngx.ERR, `njs-acme: [auto] failed to remove challenge ${path}`);
-            }
+    log.info('Issuing a new Certificate:', params)
+    const fullChallengePath = joinPaths(
+      challengePath,
+      '.well-known/acme-challenge'
+    )
+    try {
+      fs.mkdirSync(fullChallengePath, { recursive: true })
+    } catch (e) {
+      log.error(
+        `Error creating directory to store challenges at ${fullChallengePath}. Ensure the ${challengePath} directory is writable by the nginx user.`
+      )
+
+      return r.return(500, 'Cannot create challenge directory')
+    }
+
+    certificatePem = await client.auto({
+      csr: Buffer.from(result.pkcs10Ber),
+      email: email,
+      termsOfServiceAgreed: true,
+      challengeCreateFn: async (authz, challenge, keyAuthorization) => {
+        log.info('Challenge Create', { authz, challenge, keyAuthorization })
+        log.info(
+          `Writing challenge file so nginx can serve it via .well-known/acme-challenge/${challenge.token}`
+        )
+
+        const path = joinPaths(fullChallengePath, challenge.token)
+        fs.writeFileSync(path, keyAuthorization)
+      },
+      challengeRemoveFn: async (_authz, challenge, _keyAuthorization) => {
+        const path = joinPaths(fullChallengePath, challenge.token)
+        try {
+          fs.unlinkSync(path)
+          log.info(`removed challenge ${path}`)
+        } catch (e) {
+          log.error(`failed to remove challenge ${path}`)
         }
-    });
+      },
+    })
+    certInfo = await readCertificateInfo(certificatePem)
+    fs.writeFileSync(certPath, certificatePem)
+    log.info(`wrote certificate to ${certPath}`)
+  }
 
-    const certPath = prefix + commonName + CERTIFICATE_SUFFIX;
-    fs.writeFileSync(certPath, certificatePem, 'utf-8');
-    r.log(`njs-acme: wrote certificate to ${certPath}`);
+  const info = {
+    certificate: certInfo,
+    renewedCertificate: renewCertificate,
+  }
 
-    const info = {
-        certificate: certificatePem,
-        certificateKey: pkeyPem,
-        csr: pemExported
-    }
-    return r.return(200, JSON.stringify(info));
+  return r.return(200, JSON.stringify(info))
 }
 ```
 

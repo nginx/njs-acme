@@ -5,6 +5,9 @@ import fs from 'fs'
 import querystring from 'querystring'
 import arrayFromPolyfill from './arrayFrom.js'
 import { ClientExternalAccountBindingOptions } from './client.js'
+import { Logger } from './logger.js'
+
+const log = new Logger('utils')
 
 // workaround for PKI.JS to work
 globalThis.unescape = querystring.unescape
@@ -67,7 +70,7 @@ export async function generateKey(): Promise<CryptoKey | CryptoKeyPair> {
 export async function readOrCreateAccountKey(path: string): Promise<CryptoKey> {
   try {
     const accountKeyJWK = fs.readFileSync(path, 'utf8')
-    ngx.log(ngx.INFO, `acme-njs: [utils] Using account key from ${path}`)
+    log.info('Using account key from', path)
     return await crypto.subtle.importKey(
       'jwk',
       JSON.parse(accountKeyJWK),
@@ -77,18 +80,13 @@ export async function readOrCreateAccountKey(path: string): Promise<CryptoKey> {
     )
   } catch (e) {
     // TODO: separate file not found, issues with importKey
-    ngx.log(
-      ngx.WARN,
-      `acme-njs: [utils] error ${e} while reading a private key from ${path}`
-    )
+    log.warn(`error ${e} while reading a private key from ${path}`)
+
     /* Generate a new RSA key pair for ACME account */
     const keys = (await generateKey()) as Required<CryptoKeyPair>
     const jwkFormated = await crypto.subtle.exportKey('jwk', keys.privateKey)
     fs.writeFileSync(path, JSON.stringify(jwkFormated))
-    ngx.log(
-      ngx.INFO,
-      `acme-njs: [utils] Generated a new account key and saved it to ${path}`
-    )
+    log.info('Generated a new account key and saved it to', path)
     return keys.privateKey
   }
 }
@@ -112,7 +110,7 @@ export async function getPublicJwk(
 ): Promise<RsaPublicJwk | EcdsaPublicJwk> {
   if (!privateKey) {
     const errMsg = 'Invalid or missing private key'
-    ngx.log(ngx.ERR, errMsg)
+    log.error(errMsg)
     throw new Error(errMsg)
   }
 
@@ -237,7 +235,7 @@ function getSignatureParameters(
   )
   if (!Object.keys(parameters.algorithm).length) {
     const errMsg = 'Parameter `algorithm` is empty'
-    ngx.log(ngx.ERR, errMsg)
+    log.error(errMsg)
     throw new Error(errMsg)
   }
   const algorithm = parameters.algorithm
@@ -301,10 +299,7 @@ function getSignatureParameters(
       }
       break
     default:
-      ngx.log(
-        ngx.ERR,
-        `Unsupported signature algorithm: ${privateKey.algorithm.name}`
-      )
+      log.error(`Unsupported signature algorithm: ${privateKey.algorithm.name}`)
       throw new Error(
         `Unsupported signature algorithm: ${privateKey.algorithm.name}`
       )
@@ -609,9 +604,8 @@ async function retryPromise(
     }
 
     const duration = backoff.duration()
-    ngx.log(
-      ngx.INFO,
-      `acme-js: [utils] Promise rejected attempt #${backoff.attempts}, retrying in ${duration}ms: ${e}`
+    log.info(
+      `Promise rejected attempt #${backoff.attempts}, retrying in ${duration}ms: ${e}`
     )
 
     await new Promise((resolve) => {
@@ -780,7 +774,7 @@ export function getVariable(
     process.env[varname.toUpperCase()] || r.variables[varname] || defaultVal
   if (retval === undefined) {
     const errMsg = `Variable ${varname} not found and no default value given.`
-    ngx.log(ngx.ERR, errMsg)
+    log.error(errMsg)
     throw new Error(errMsg)
   }
   return retval

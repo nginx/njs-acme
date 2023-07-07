@@ -64,6 +64,7 @@
   },
   "include": [
     "./integration-tests",
+    "./unit-tests",
     "./*.js",
   ],
   "references": [
