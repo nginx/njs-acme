@@ -102,7 +102,7 @@ be the environment variable `NJS_ACME_ACCOUNT_EMAIL`.
 ### `location` Blocks
 * Location to handle ACME challenge requests.
   ```nginx
-  location ^~ /.well-known/acme-challenge/ {
+  location ~ "^/\.well-known/acme-challenge/[-_A-Za-z0-9]{22,128}$" {
     js_content acme.challengeResponse;
   }
   ```
