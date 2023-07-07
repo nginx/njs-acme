@@ -765,6 +765,7 @@ export function getVariable(
     | 'njs_acme_account_email'
     | 'njs_acme_server_names'
     | 'njs_acme_dir'
+    | 'njs_acme_challenge_dir'
     | 'njs_acme_account_private_jwk'
     | 'njs_acme_directory_uri'
     | 'njs_acme_verify_provider_https',
@@ -798,6 +799,19 @@ export function acmeServerNames(r: NginxHTTPRequest): string[] {
  */
 export function acmeDir(r: NginxHTTPRequest): string {
   return getVariable(r, 'njs_acme_dir', '/etc/nginx/njs-acme')
+}
+
+/**
+ * Return the path where ACME challenges are stored
+ * @param r request
+ * @returns configured path or default
+ */
+export function acmeChallengeDir(r: NginxHTTPRequest): string {
+  return getVariable(
+    r,
+    'njs_acme_challenge_dir',
+    joinPaths(acmeDir(r), 'challenge')
+  )
 }
 
 /**

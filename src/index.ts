@@ -8,6 +8,7 @@ import {
   getVariable,
   joinPaths,
   acmeDir,
+  acmeChallengeDir,
   acmeAccountPrivateJWKPath,
   acmeDirectoryURI,
   acmeVerifyProviderHTTPS,
@@ -131,25 +132,13 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
     fs.writeFileSync(pkeyPath, pkeyPem)
     log.info(`Wrote Private key to ${pkeyPath}`)
 
-    // this is the only variable that has to be set in nginx.conf
-    const challengePath = r.variables.njs_acme_challenge_dir
+    const challengePath = acmeChallengeDir(r)
 
-    if (challengePath === undefined || challengePath.length === 0) {
-      return r.return(
-        500,
-        "Nginx variable 'njs_acme_challenge_dir' must be set"
-      )
-    }
-    log.info('Issuing a new Certificate:', params)
-    const fullChallengePath = joinPaths(
-      challengePath,
-      '.well-known/acme-challenge'
-    )
     try {
-      fs.mkdirSync(fullChallengePath, { recursive: true })
+      fs.mkdirSync(challengePath, { recursive: true })
     } catch (e) {
       log.error(
-        `Error creating directory to store challenges at ${fullChallengePath}. Ensure the ${challengePath} directory is writable by the nginx user.`
+        `Error creating directory to store challenges. Ensure the ${challengePath} directory is writable by the nginx user.`
       )
 
       return r.return(500, 'Cannot create challenge directory')
@@ -164,12 +153,15 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
         log.info(
           `Writing challenge file so nginx can serve it via .well-known/acme-challenge/${challenge.token}`
         )
-
-        const path = joinPaths(fullChallengePath, challenge.token)
+        ngx.log(
+          ngx.INFO,
+          `njs-acme: [auto] Writing challenge file so nginx can serve it via ${challengePath}/${challenge.token}`
+        )
+        const path = joinPaths(challengePath, challenge.token)
         fs.writeFileSync(path, keyAuthorization)
       },
       challengeRemoveFn: async (_authz, challenge, _keyAuthorization) => {
-        const path = joinPaths(fullChallengePath, challenge.token)
+        const path = joinPaths(challengePath, challenge.token)
         try {
           fs.unlinkSync(path)
           log.info(`removed challenge ${path}`)
@@ -327,13 +319,61 @@ function read_cert_or_key(prefix: string, domain: string, suffix: string) {
   return { path, data }
 }
 
+/*
+ * Demonstrates using js_content to serve challenge responses.
+ */
+async function challengeResponse(r: NginxHTTPRequest): Promise<void> {
+  const challengeUriPrefix = '/.well-known/acme-challenge/'
+
+  // Only support GET requests
+  if (r.method !== 'GET') {
+    return r.return(400, 'Bad Request')
+  }
+
+  // Here is the challenge token spec:
+  // https://datatracker.ietf.org/doc/html/draft-ietf-acme-acme-07#section-8.3
+  // - greater than 128 bits or ~22 base-64 encoded characters.
+  //   Let's Encrypt uses a 43-character string.
+  // - base64url characters only
+
+  // Ensure we're not given a token that is too long (128 chars to be future-proof)
+  if (r.uri.length > 128 + challengeUriPrefix.length) {
+    return r.return(400, 'Bad Request')
+  }
+
+  // Ensure this handler is only receiving /.well-known/acme-challenge/
+  // requests, and not other requests through some kind of configuration
+  // mistake.
+  if (!r.uri.startsWith(challengeUriPrefix)) {
+    return r.return(400, 'Bad Request')
+  }
+
+  const token = r.uri.substring(challengeUriPrefix.length)
+
+  // Token must only contain base64url chars
+  if (token.match(/[^a-zA-Z0-9-_]/)) {
+    return r.return(400, 'Bad Request')
+  }
+
+  try {
+    return r.return(
+      200,
+      // just return the contents of the token file
+      fs.readFileSync(joinPaths(acmeChallengeDir(r), token), 'utf8')
+    )
+  } catch (e) {
+    return r.return(404, 'Not Found')
+  }
+}
+
 export default {
   js_cert,
   js_key,
   acmeNewAccount,
+  challengeResponse,
   clientNewAccount,
   clientAutoMode,
   createCsrHandler,
   LogLevel,
-  Logger
+  Logger,
 }
