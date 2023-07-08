@@ -9,6 +9,7 @@ module.exports = {
     'babel-register-ts',
     'source-map-support/register',
   ],
+  file: 'unit-tests/setupGlobals.ts',
   spec: [
     'unit-tests/**/*.test.ts',
   ],

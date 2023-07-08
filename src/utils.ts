@@ -3,8 +3,8 @@ import * as pkijs from 'pkijs'
 import * as asn1js from 'asn1js'
 import fs from 'fs'
 import querystring from 'querystring'
-import { ClientExternalAccountBindingOptions } from './client.js'
-import { Logger } from './logger.js'
+import { ClientExternalAccountBindingOptions } from './client'
+import { Logger } from './logger'
 
 const log = new Logger('utils')
 
@@ -833,7 +833,17 @@ export function acmeAltNames(r: NginxHTTPRequest): string[] {
 export function acmeServerNames(r: NginxHTTPRequest): string[] {
   const nameStr = getVariable(r, 'njs_acme_server_names') // no default == mandatory
   // split string value on comma and/or whitespace and lowercase each element
-  return nameStr.split(/[,\s]+/).map((n) => n.toLowerCase())
+  const names = nameStr.split(/[,\s]+/)
+  const invalidNames = names.filter((name) => !isValidHostname(name))
+
+  if (invalidNames.length > 0) {
+    const errMsg =
+      'Invalid hostname(s) in `njs_acme_server_names` detected: ' +
+      invalidNames.join(', ')
+    log.error(errMsg)
+    throw new Error(errMsg)
+  }
+  return names.map((n) => n.toLowerCase())
 }
 
 /**
@@ -925,4 +935,16 @@ export function areEqualSets(arr1: string[], arr2: string[]): boolean {
 export function joinPaths(...args: string[]): string {
   // join args with a slash remove duplicate slashes
   return args.join('/').replace(/\/+/g, '/')
+}
+
+export function isValidHostname(hostname: string): boolean {
+  return (
+    !!hostname &&
+    hostname.length < 256 &&
+    !!hostname.match(
+      // hostnames are dot-separated groups of letters, numbers, hyphens (but
+      // not beginning or ending with hyphens), and may end with a period
+      /^[a-z\d]([-a-z\d]{0,61}[a-z\d])?(\.[a-z\d]([-a-z\d]{0,61}[a-z\d])?)*\.?$/i
+    )
+  )
 }

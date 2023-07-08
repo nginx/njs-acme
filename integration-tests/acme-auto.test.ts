@@ -1,5 +1,4 @@
 import { strict as assert } from 'assert'
-import { test } from 'mocha'
 import './hooks'
 
 interface CertificateData {
