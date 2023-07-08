@@ -1,7 +1,7 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "types": ["njs-types", "node"]
+    "types": ["node"]
   },
   "files": [
     "../node_modules/njs-types/ngx_http_js_module.d.ts",

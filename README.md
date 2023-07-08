@@ -280,7 +280,8 @@ Look at `clientAutoMode` in [`src/index.ts`](./src/index.ts) to see how you can 
 |                       Path              | Description |
 | ----                                    | ------------|
 | [src](src)                              | Contains your source code that will be compiled to the `dist/` directory. |
-| [integration-tests](integration-tests)  | Contains your source code of tests. |
+| [integration-tests](integration-tests)  | Integration tests. |
+| [unit-tests](unit-tests)                | Unit tests for code in `src/`. |
 
 ## Contributing
 
