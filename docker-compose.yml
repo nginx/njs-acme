@@ -10,13 +10,6 @@ services:
       - 14000:443  # HTTPS ACME API
       # - 14000:14000  # HTTPS ACME API
       - 15000:15000  # HTTPS Management API
-  challtestsrv:
-    image: letsencrypt/pebble-challtestsrv:latest
-    platform: linux/amd64
-    command: pebble-challtestsrv -defaultIPv6 "" -defaultIPv4 10.30.50.3
-    hostname: challtestsrv
-    ports:
-      - 8055:8055  # HTTP Management API
   node:
     build:
       context: .
