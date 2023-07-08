@@ -42,6 +42,7 @@ export type AccountUpdateRequest = {
   contact?: string[]
   termsOfServiceAgreed?: boolean
   externalAccountBinding?: ClientExternalAccountBindingOptions
+  onlyReturnExisting?: boolean
 } | null
 
 /**
