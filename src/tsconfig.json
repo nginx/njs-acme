@@ -26,25 +26,18 @@
     // "noImplicitThis": true,
     // "alwaysStrict": true,
     "isolatedModules": true,
-    "resolveJsonModule" : true,
+    "resolveJsonModule": true,
     "rootDir": "../",
     "typeRoots": [],
-    "types": [
-      "njs-types",
-    ],
+    "types": ["njs-types"]
   },
-  "include": [
-    ".",
-    "../package.json"
-  ],
-  "exclude": [
-    "../node_modules"
-  ],
+  "include": [".", "../package.json"],
+  "exclude": ["../node_modules"],
   "files": [
     "../node_modules/njs-types/ngx_http_js_module.d.ts",
     "../node_modules/njs-types/njs_webcrypto.d.ts",
     "../node_modules/njs-types/njs_core.d.ts",
     "../node_modules/njs-types/njs_modules/crypto.d.ts",
     "../node_modules/njs-types/njs_modules/fs.d.ts"
-  ],
+  ]
 }
