@@ -91,10 +91,6 @@ be the environment variable `NJS_ACME_ACCOUNT_EMAIL`.
   ```nginx
   js_var $njs_acme_account_email test@example.com;
   ```
-* Set the directory to store challenges. This is also used in a `location{}` block below.
-  ```nginx
-  js_var $njs_acme_challenge_dir /etc/nginx/njs-acme/challenge;
-  ```
 * Set and use variables to hold the certificate and key paths using Javascript.
   ```nginx
   js_set $dynamic_ssl_cert acme.js_cert;
@@ -109,6 +105,18 @@ be the environment variable `NJS_ACME_ACCOUNT_EMAIL`.
   location ~ "^/\.well-known/acme-challenge/[-_A-Za-z0-9]{22,128}$" {
     js_content acme.challengeResponse;
   }
+  ```
+
+  `$njs_acme_challenge_dir` is optional when `js_content acme.challengeResponse` is used to serve challenges; Alternatively, set the variable `$njs_acme_challenge_dir` with folder path to store challenges in server section and use for example `root` directive to serve them.
+  ```nginx
+  server {
+    js_var $njs_acme_challenge_dir /etc/nginx/njs-acme/challenge;
+    <...>
+    location ~ "^/\.well-known/acme-challenge/[-_A-Za-z0-9]{22,128}$" {
+      default_type "text/plain";
+      root /etc/nginx/njs-acme/challenge/;
+    }
+
   ```
 * Location, that when requested, inspects the stored certificate (if present) and will request a new certificate if necessary. The included `docker-compose.yml` shows how to use a `healthcheck:` configuration for the NGINX service to periodically request this endpoint.
     ```nginx
@@ -134,6 +142,10 @@ service:
 ```
 
 This configuration will request `/acme/auto` every 90 seconds. If the certificate is nearing expiry, it will be automatically renewed.
+
+When deploying in Kubernetes you can use [liveness-check](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-http-request) similarly to periodically request  `/acme/auto`.
+
+We also recommend to use a persistent storage for certificates and keys.
 
 ## Development
 
@@ -232,7 +244,7 @@ To build `acme.js` from the TypeScript source, first ensure that you have Node.j
 
 ## Build Your Own Flows
 
-If the reference impelementation does not meet your needs, then you can build your own flows using this project as a library of convenience functions.
+If the reference implementation does not meet your needs, then you can build your own flows using this project as a library of convenience functions.
 
 The `clientAutoMode` exported function is a reference implementation of the `js_content` handler.
 
