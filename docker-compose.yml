@@ -8,7 +8,6 @@ services:
       - ./integration-tests/pebble/:/etc/pebble/
     ports:
       - 14000:443  # HTTPS ACME API
-      # - 14000:14000  # HTTPS ACME API
       - 15000:15000  # HTTPS Management API
   node:
     build:
@@ -29,7 +28,7 @@ services:
       - ./examples/nginx.conf:/etc/nginx/nginx.conf
       - ./dev/nginx_wait_for_js:/nginx_wait_for_js
       - node_dist:/usr/lib/nginx/njs_modules/
-        # - certs:/etc/nginx/njs-acme/
+      - certs:/etc/nginx/njs-acme/
     environment:
       - NJS_ACME_DIR=/etc/nginx/njs-acme/
       - NJS_ACME_VERIFY_PROVIDER_HTTPS=false
@@ -40,7 +39,7 @@ services:
       - 4443:443
     healthcheck:
       test: ["CMD", "curl", "-f", "http://proxy.nginx.com:8000/acme/auto"]
-      interval: 1m30s
+      interval: 90s
       timeout: 90s
       retries: 3
       start_period: 10s
