@@ -3,7 +3,6 @@ import * as pkijs from 'pkijs'
 import * as asn1js from 'asn1js'
 import fs from 'fs'
 import querystring from 'querystring'
-import arrayFromPolyfill from './arrayFrom.js'
 import { ClientExternalAccountBindingOptions } from './client.js'
 import { Logger } from './logger.js'
 
@@ -17,10 +16,6 @@ pkijs.setEngine(
   'webcrypto',
   new pkijs.CryptoEngine({ name: 'webcrypto', crypto: crypto })
 )
-
-if (!Array.from) {
-  Array.from = arrayFromPolyfill
-}
 
 export interface RsaPublicJwk {
   e: string
