@@ -1,3 +1,5 @@
+/* eslint-disable no-fallthrough */
+/* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 /**
  * this is from https://github.com/nginx/njs-examples/blob/master/njs/http/certs/js/x509.js
  *
@@ -370,6 +372,7 @@ function parse_pem_cert(pem) {
     der = der.slice(1, -2)
   }
 
+  // eslint-disable-next-line no-undef
   return asn1_read(Buffer.from(der.join(''), 'base64'))
 }
 

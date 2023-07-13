@@ -1,6 +1,13 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "types": ["node", "njs-types"]
-  }
+    "types": ["njs-types", "node"]
+  },
+  "files": [
+    "../node_modules/njs-types/ngx_http_js_module.d.ts",
+    "../node_modules/njs-types/njs_webcrypto.d.ts",
+    "../node_modules/njs-types/njs_core.d.ts",
+    "../node_modules/njs-types/njs_modules/crypto.d.ts",
+    "../node_modules/njs-types/njs_modules/fs.d.ts"
+  ]
 }
