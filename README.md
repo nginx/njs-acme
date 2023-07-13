@@ -49,6 +49,10 @@ You can use environment variables or NGINX configuration variables to control th
         value: Path to the private JWK\
         default: `${NJS_ACME_DIR}/account_private_key.json`
 
+   - `NJS_ACME_SHARED_DICT_ZONE_NAME`\
+        [Shared Dictionary Zone](https://nginx.org/en/docs/http/ngx_http_js_module.html#js_shared_dict_zone) name .\
+        value: Zone name used as in `js_shared_dict_zone` directive\
+        default: `acme`
 
 ## NGINX Configuration
 
@@ -77,6 +81,11 @@ There are a few pieces that are required to be present in your `nginx.conf` file
   ```nginx
   resolver 127.0.0.11 ipv6=off; # docker-compose
   ```
+* Configure a [Shared Dictionary Zone](https://nginx.org/en/docs/http/ngx_http_js_module.html#js_shared_dict_zone) to use.\
+  Set zone size to be enough to store all certs and keys. e.g. 1MB should be enough to store 100 certs/keys
+  ```nginx
+  js_shared_dict_zone zone=acme:1m
+  ```
 
 ### `server` Section
 * Set the hostname or hostnames (space-separated) to generate the certificate.
@@ -94,9 +103,15 @@ be defined with the environment variable `NJS_ACME_ACCOUNT_EMAIL`.
   js_set $dynamic_ssl_cert acme.js_cert;
   js_set $dynamic_ssl_key acme.js_key;
 
-  ssl_certificate $dynamic_ssl_cert;
-  ssl_certificate_key $dynamic_ssl_key;
+  ssl_certificate data:$dynamic_ssl_cert;
+  ssl_certificate_key data:$dynamic_ssl_key;
   ```
+* You may use `js_shared_dict_zone` to improve performance and cache certificates
+and keys in shared memory, then set variable with the zone name.
+  ```nginx
+  js_var $njs_acme_shared_dict_zone_name acme;
+  ```
+
 ### `location` Blocks
 * Location to handle ACME challenge requests.
   ```nginx

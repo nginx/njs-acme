@@ -753,7 +753,8 @@ export function getVariable(
     | 'njs_acme_challenge_dir'
     | 'njs_acme_account_private_jwk'
     | 'njs_acme_directory_uri'
-    | 'njs_acme_verify_provider_https',
+    | 'njs_acme_verify_provider_https'
+    | 'njs_acme_shared_dict_zone_name',
   defaultVal?: string
 ): string {
   const retval =
@@ -786,6 +787,14 @@ export function acmeDir(r: NginxHTTPRequest): string {
   return getVariable(r, 'njs_acme_dir', '/etc/nginx/njs-acme')
 }
 
+/**
+ * Return the shared_dict zone name
+ * @param r request
+ * @returns configured shared_dict zone name or default
+ */
+export function acmeZoneName(r: NginxHTTPRequest): string {
+  return getVariable(r, 'njs_acme_shared_dict_zone_name', 'acme')
+}
 /**
  * Return the path where ACME challenges are stored
  * @param r request
