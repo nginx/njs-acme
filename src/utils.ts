@@ -201,10 +201,6 @@ export function encodeTBS(pkcs10: pkijs.CertificationRequest): asn1js.Sequence {
   })
 }
 
-interface AlgoCryptoKey extends CryptoKey {
-  algorithm?: pkijs.CryptoEngineAlgorithmParams | { name: string }
-}
-
 /**
  * Returns signature parameters based on the private key and hash algorithm
  *
@@ -213,7 +209,7 @@ interface AlgoCryptoKey extends CryptoKey {
  * @returns {{signatureAlgorithm: pkijs.AlgorithmIdentifier; parameters: pkijs.CryptoEngineAlgorithmParams;}} An object containing signature algorithm and parameters
  */
 function getSignatureParameters(
-  privateKey: AlgoCryptoKey,
+  privateKey: CryptoKey,
   hashAlgorithm = 'SHA-1'
 ): {
   signatureAlgorithm: pkijs.AlgorithmIdentifier
@@ -223,10 +219,6 @@ function getSignatureParameters(
   pkijs.getOIDByAlgorithm({ name: hashAlgorithm }, true, 'hashAlgorithm')
   // Initial variables
   const signatureAlgorithm = new pkijs.AlgorithmIdentifier()
-
-  privateKey.algorithm = {
-    name: 'RSASSA-PKCS1-V1_5',
-  }
 
   //#region Get a "default parameters" for current algorithm
   const parameters = pkijs.getAlgorithmParameters(
@@ -342,19 +334,12 @@ export async function createCsr(params: {
   // TODO:  allow to provide keys in addition to always generating one
   const { privateKey, publicKey } =
     (await generateKey()) as Required<CryptoKeyPair>
-  const algoPrivateKey = privateKey as AlgoCryptoKey
 
   const pkcs10 = new pkijs.CertificationRequest()
   pkcs10.version = 0
 
   addSubjectAttributes(pkcs10.subject.typesAndValues, params)
   await addExtensions(pkcs10, params, publicKey)
-
-  // FIXME: workaround for PKIS.js
-  algoPrivateKey.algorithm = pkijs.getAlgorithmParameters(
-    'RSASSA-PKCS1-v1_5',
-    'sign'
-  )
   await signCsr(pkcs10, privateKey)
 
   const pkcs10Ber = getPkcs10Ber(pkcs10)
@@ -491,7 +476,7 @@ async function getSubjectKeyIdentifier(
 
 async function signCsr(
   pkcs10: pkijs.CertificationRequest,
-  privateKey: AlgoCryptoKey
+  privateKey: CryptoKey
 ): Promise<void> {
   /* Set signatureValue  */
   pkcs10.tbsView = new Uint8Array(encodeTBS(pkcs10).toBER())
