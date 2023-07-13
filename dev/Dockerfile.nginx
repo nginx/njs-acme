@@ -1,7 +1,9 @@
-ARG NGINX_VERSION=1.24.0
+ARG NGINX_VERSION=1.25.1
+ARG NJS_VERSION=0.8.0
 FROM nginx:${NGINX_VERSION}
+ARG NGINX_VERSION
+ARG NJS_VERSION
 
-# following installation steps from http://nginx.org/en/linux_packages.html#Debian
 RUN --mount=type=cache,target=/var/cache/apt <<EOF
     set -eux
     export DEBIAN_FRONTEND=noninteractive
@@ -11,6 +13,28 @@ RUN --mount=type=cache,target=/var/cache/apt <<EOF
     update-ca-certificates
     apt-get remove --purge --auto-remove --yes
 EOF
+
+# As of 07/13/2023 NJS v0.8.0 is not included into nginx docker image.
+# this a temprary to install it
+# following installation steps from http://nginx.org/en/linux_packages.html#Debian
+RUN --mount=type=cache,target=/var/cache/apt <<EOF
+    set -eux
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get -qq update
+    curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor \
+        | tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+    gpg --dry-run --quiet --no-keyring --import --import-options import-show \
+        /usr/share/keyrings/nginx-archive-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] \
+        http://nginx.org/packages/mainline/debian $(echo $PKG_RELEASE | cut -f2 -d~) nginx" \
+        | tee /etc/apt/sources.list.d/nginx.list
+    apt-get -qq update
+    apt-get -qq install --yes --no-install-recommends --no-install-suggests \
+        nginx-module-njs=${NGINX_VERSION}+${NJS_VERSION}-${PKG_RELEASE}
+    apt-get remove --purge --auto-remove --yes
+    rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/nginx.list
+EOF
+
 RUN mkdir -p /usr/lib/nginx/njs_modules
 RUN mkdir -p /etc/nginx/njs-acme
 RUN chown nginx: /etc/nginx/njs-acme

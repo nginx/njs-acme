@@ -2,7 +2,7 @@
 
 This repository provides a JavaScript library to work with [ACME](https://datatracker.ietf.org/doc/html/rfc8555) providers such as Let's Encrypt for [NJS](https://nginx.org/en/docs/njs/). The source code is compatible with the `ngx_http_js_module` runtime. This allows for the automatic issue of TLS/SSL certificates for NGINX.
 
-Requires at least `njs-0.7.12`, which is included with NGINX since nginx-1.24.0.
+Requires at least `njs-0.8.0`, which is included with NGINX since nginx-1.25.**???-TBD**.
 
 NOTE: Some ACME providers have strict rate limits. Please consult with your provider. For Let's Encrypt refer to their [rate-limits documentation](https://letsencrypt.org/docs/rate-limits/).
 

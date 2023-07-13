@@ -245,14 +245,10 @@ export class HttpClient {
    *
    * @param {string} url HTTP URL
    * @param {string} method HTTP method
-   * @param {object} [body] Request options
+   * @param {string} [body] Request options
    * @returns {Promise<Response>} HTTP response
    */
-  async request(
-    url: NjsStringLike,
-    method: AcmeMethod,
-    body: NjsStringLike = ''
-  ): Promise<Response> {
+  async request(url: string, method: AcmeMethod, body = ''): Promise<Response> {
     const options: NgxFetchOptions = {
       headers: {
         'user-agent': `njs-acme-v${version}`,
@@ -289,13 +285,13 @@ export class HttpClient {
     payload: ApiPayload,
     {
       kid = null as string | null,
-      nonce = null as NjsByteString | null,
+      nonce = null as string | null,
       includeExternalAccountBinding = false,
     } = {},
     attempts = 0
   ): Promise<Response> {
     if (!nonce) {
-      nonce = (await this.getNonce()) as NjsByteString
+      nonce = await this.getNonce()
     }
     if (!this.jwk) {
       await this.getJwk()
@@ -544,7 +540,7 @@ export class HttpClient {
    */
   prepareSignedBody(
     alg: AcmeSignAlgo | string,
-    url: NjsStringLike,
+    url: string,
     payload: ApiPayload = null,
     jwk: RsaPublicJwk | EcdsaPublicJwk | null | undefined,
     { nonce = null as string | null, kid = null as string | null } = {}
@@ -617,7 +613,7 @@ export class HttpClient {
    * @returns {Promise<SignedPayload>} JWS request body
    */
   async createSignedBody(
-    url: NjsStringLike,
+    url: string,
     payload: ApiPayload = null,
     { nonce = null as string | null, kid = null as string | null } = {}
   ): Promise<SignedPayload> {
