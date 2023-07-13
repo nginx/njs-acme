@@ -2,6 +2,7 @@
 // @ts-check
 
 /** @type {babel.ConfigFunction} */
+// eslint-disable-next-line no-undef
 module.exports = (api) => ({
   presets: [
     // Transpile modern JavaScript into code compatible with njs.

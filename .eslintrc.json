@@ -4,6 +4,10 @@
     "plugin:@typescript-eslint/recommended",
     "plugin:prettier/recommended"
   ],
+  "ignorePatterns": ["**/node_modules/", "/dist/", "/lib/"],
+  "parserOptions": {
+    "sourceType": "module"
+  },
   "rules": {
     "@typescript-eslint/no-unused-vars": [
       "warn",
