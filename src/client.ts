@@ -417,7 +417,7 @@ export class AcmeClient {
    *
    * https://tools.ietf.org/html/rfc8555#section-7.3.5
    *
-   * @param {CryptoKey|buffer|string} newAccountKey New account private key
+   * @param {CryptoKey} newAccountKey New account private key
    * @param {object} [data] Additional request data
    * @returns {Promise<object>} Account
    *
@@ -428,23 +428,15 @@ export class AcmeClient {
    * ```
    */
   async updateAccountKey(
-    newAccountKey: CryptoKey | string | Buffer,
+    newAccountKey: CryptoKey,
     data: Record<string, unknown> = {}
   ): Promise<Record<string, unknown>> {
-    // FIXME: if string | Buffer then handle reading from PEM
-
-    if (Buffer.isBuffer(newAccountKey) || typeof newAccountKey === 'string') {
-      newAccountKey = Buffer.from(newAccountKey)
-    }
-
     const accountUrl = this.api.getAccountUrl()
-
-    const newCryptoKey = '' // TODO FIX THIS
 
     /* Create new HTTP and API clients using new key */
     const newHttpClient = new HttpClient(
       this.opts.directoryUrl,
-      newCryptoKey,
+      newAccountKey,
       accountUrl
     )
 
@@ -776,7 +768,7 @@ export class AcmeClient {
   async getCertificate(
     order: Record<string, unknown>,
     _preferredChain: string | null = null // TODO delete?
-  ): Promise<NjsByteString> {
+  ): Promise<string> {
     if (!validStates.includes(order.status as string)) {
       order = await this.waitForValidStatus(order)
     }
@@ -887,7 +879,7 @@ export class AcmeClient {
    * });
    * ```
    */
-  auto(opts: ClientAutoOptions): Promise<NjsByteString> {
+  auto(opts: ClientAutoOptions): Promise<string> {
     return auto(this, opts)
   }
 
@@ -907,12 +899,12 @@ export class AcmeClient {
  *
  * @param {AcmeClient} client ACME client
  * @param {ClientAutoOptions} userOpts Options
- * @returns {Promise<NjsByteString>} Certificate
+ * @returns {Promise<string>} Certificate
  */
 async function auto(
   client: AcmeClient,
   userOpts: ClientAutoOptions
-): Promise<NjsByteString> {
+): Promise<string> {
   const opts = { ...autoDefaultOpts, ...userOpts }
   const log = new Logger('auto', client.minLevel)
   const accountPayload: Record<string, unknown> = {
