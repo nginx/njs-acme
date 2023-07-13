@@ -12,6 +12,7 @@ import {
   acmeAccountPrivateJWKPath,
   acmeDirectoryURI,
   acmeVerifyProviderHTTPS,
+  acmeZoneName,
 } from './utils'
 import { HttpClient } from './api'
 import { AcmeClient } from './client'
@@ -255,26 +256,7 @@ async function createCsrHandler(r: NginxHTTPRequest): Promise<void> {
  * @returns {string, string} - The path and cert associated with the server name.
  */
 function js_cert(r: NginxHTTPRequest): string {
-  const prefix = acmeDir(r)
-  const serverNames = acmeServerNames(r)
-  const { path, data } = read_cert_or_key(
-    prefix,
-    serverNames[0].toLowerCase(), // filename is the commonName (first serverName)
-    CERTIFICATE_SUFFIX
-  )
-  // log.info(`Loaded cert for ${r.variables.ssl_server_name} from path: ${path}`);
-  if (data.length == 0) {
-    log.info(
-      `seems there is no cert for ${r.variables.ssl_server_name} from path: ${path}`
-    )
-    /*
-      // FIXME: is there a way to send a subrequest so we kick in auto mode to issue a new one?
-      r.subrequest('http://localhost:8000/acme/auto',
-          {detached: true, method: 'GET', body: undefined});
-      log.info('notified /acme/auto');
-    */
-  }
-  return path
+  return read_cert_or_key(r, CERTIFICATE_SUFFIX)
 }
 
 /**
@@ -283,40 +265,42 @@ function js_cert(r: NginxHTTPRequest): string {
  * @returns {string} - The path and key associated with the server name.
  */
 function js_key(r: NginxHTTPRequest): string {
-  const prefix = acmeDir(r)
-  const serverNames = acmeServerNames(r)
-  const { path } = read_cert_or_key(
-    prefix,
-    serverNames[0].toLowerCase(), // filename is the commonName (first serverName)
-    KEY_SUFFIX
-  )
-  // log.info(`loaded key for ${r.variables.ssl_server_name} from path: ${path}`);
-  return path
+  return read_cert_or_key(r, KEY_SUFFIX)
 }
 
-function read_cert_or_key(prefix: string, domain: string, suffix: string) {
-  const none_wildcard_path = joinPaths(prefix, domain + suffix)
-  const wildcard_path = joinPaths(
-    prefix,
-    domain.replace(/.*?\./, '*.') + suffix
-  )
-
+function read_cert_or_key(r: NginxHTTPRequest, suffix: string) {
   let data = ''
   let path = ''
+  const prefix = acmeDir(r)
+  const serverNames = acmeServerNames(r)
+  const commonName = serverNames[0].toLowerCase()
+  const zone = acmeZoneName(r)
+  path = joinPaths(prefix, commonName + suffix)
+  const key = ['acme', path].join(':')
+  const cache = zone && ngx.shared && ngx.shared[zone]
 
-  try {
-    data = fs.readFileSync(none_wildcard_path, 'utf8')
-    path = none_wildcard_path
-  } catch (e) {
-    try {
-      data = fs.readFileSync(wildcard_path, 'utf8')
-      path = wildcard_path
-    } catch (e) {
-      data = ''
+  if (cache) {
+    data = (cache.get(key) as string) || ''
+    if (data) {
+      return data
     }
   }
-
-  return { path, data }
+  try {
+    data = fs.readFileSync(path, 'utf8')
+  } catch (e) {
+    data = ''
+    log.error('error reading from file:', path, `. Error=${e}`)
+  }
+  if (cache && data) {
+    try {
+      cache.set(key, data)
+      log.debug(`wrote to cache: ${key} zone: ${zone}`)
+    } catch (e) {
+      const errMsg = `error writing to shared dict zone: ${zone}. Error=${e}`
+      log.error(errMsg)
+    }
+  }
+  return data
 }
 
 /*
