@@ -1,14 +1,21 @@
 services:
   pebble:
-    image: letsencrypt/pebble:latest
-    platform: linux/amd64
+    # image: letsencrypt/pebble:latest
+    build:
+      context: ./dev
+      dockerfile: ./Dockerfile.pebble
     command: pebble -config /etc/pebble/config.json
     hostname: pebble
-    volumes:
-      - ./integration-tests/pebble/:/etc/pebble/
     ports:
-      - 14000:443  # HTTPS ACME API
-      - 15000:15000  # HTTPS Management API
+      - 14000  # HTTPS ACME API
+      - 15000  # HTTPS Management API
+      - 443    # Directory
+    healthcheck:
+      test: ["CMD-SHELL", "curl -k https://localhost:443 || exit 1"]
+      interval: 1s
+      timeout: 120s
+      retries: 120
+      start_period: 5s
   node:
     build:
       context: .

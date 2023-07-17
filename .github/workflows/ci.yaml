@@ -21,4 +21,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
-      - run: npm run test
+      - run: npm run test:unit
+      - run: docker compose -f ./integration-tests/docker-compose.yml build
+      - run: docker compose -f ./integration-tests/docker-compose.yml up -d pebble
+      - run: docker compose -f ./integration-tests/docker-compose.yml up test

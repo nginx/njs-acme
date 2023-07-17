@@ -1,0 +1,44 @@
+services:
+  pebble:
+    # image: letsencrypt/pebble:latest
+    build:
+      context: ../dev
+      dockerfile: ./Dockerfile.pebble
+    command: pebble -config /etc/pebble/config.json
+    hostname: pebble
+    ports:
+      - 14000
+      - 15000
+      - 443
+    healthcheck:
+      test: ["CMD-SHELL", "curl -k https://localhost:443 || exit 1"]
+      interval: 1s
+      timeout: 120s
+      retries: 120
+      start_period: 5s
+  test:
+    build:
+      context: ../
+      dockerfile: ./integration-tests/Dockerfile
+
+    command: "npm run test:integration"
+    depends_on:
+      pebble:
+        condition: service_healthy
+    hostname: proxy.nginx.com
+    volumes:
+      - ../:/app
+      - /app/node_modules
+      - certs:/etc/nginx/njs-acme/
+    environment:
+      - NJS_ACME_DIR=/etc/nginx/njs-acme/
+      - NJS_ACME_VERIFY_PROVIDER_HTTPS=false
+      - NJS_ACME_DIRECTORY_URI=https://pebble/dir
+      - NJS_ACME_ACCOUNT_EMAIL=test@example.com
+      - USE_NGINX_BIN_PATH=/usr/sbin/nginx
+      - NGINX_HOSTNAME=proxy.nginx.com
+    ports:
+      - 8000:8000
+      - 4443:4443
+volumes:
+  certs:

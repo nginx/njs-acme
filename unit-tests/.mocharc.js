@@ -8,10 +8,8 @@ module.exports = {
   require: [
     'babel-register-ts',
     'source-map-support/register',
-    'integration-tests/hooks.ts',
   ],
   spec: [
-    'integration-tests/**/*.test.ts',
     'unit-tests/**/*.test.ts',
   ],
 }

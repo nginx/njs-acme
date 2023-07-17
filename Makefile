@@ -57,3 +57,9 @@ docker-devup: docker-build ## Start all docker compose services for development/
 .PHONY: docker-reload-nginx
 docker-reload-nginx: ## Reload nginx started from `docker compose`
 	$(DOCKER) compose up -d --force-recreate nginx && $(DOCKER) compose logs -f nginx
+
+
+.PHONY: docker-integration-tests
+docker-integration-tests: docker-copy ## Run integration tests in docker
+	$(DOCKER) compose -f ./integration-tests/docker-compose.yml build && \
+	$(DOCKER) compose -f ./integration-tests/docker-compose.yml up -d pebble
