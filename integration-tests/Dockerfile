@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM node:20-bullseye
 
 ENV NJS_ACME_DIR=/etc/nginx/njs-acme/
