@@ -1,0 +1,4 @@
+FROM letsencrypt/pebble:latest
+RUN apk --update add curl
+
+COPY ./pebble/* /etc/pebble/
