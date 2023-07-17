@@ -61,5 +61,6 @@ docker-reload-nginx: ## Reload nginx started from `docker compose`
 
 .PHONY: docker-integration-tests
 docker-integration-tests: docker-copy ## Run integration tests in docker
-	$(DOCKER) compose -f ./integration-tests/docker-compose.yml build && \
+	$(DOCKER) compose -f ./integration-tests/docker-compose.yml build
 	$(DOCKER) compose -f ./integration-tests/docker-compose.yml up -d pebble
+	$(DOCKER) compose -f ./integration-tests/docker-compose.yml up --no-log-prefix test
