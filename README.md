@@ -1,3 +1,9 @@
+[![CI](https://github.com/nginxinc/njs-acme/actions/workflows/ci.yaml/badge.svg)](https://github.com/nginxinc/njs-acme/actions/workflows/ci.yaml)
+[![Project Status: Concept – Minimal or no implementation has been done yet, or the repository is only intended to be a limited example, demo, or proof-of-concept.](https://www.repostatus.org/badges/latest/concept.svg)](https://www.repostatus.org/#concept)
+[![Community Support](https://badgen.net/badge/support/community/cyan?icon=awesome)](https://github.com/nginxinc/njs-acme/discussions)
+
+
+
 # njs-acme
 
 This repository provides a JavaScript library to work with [ACME](https://datatracker.ietf.org/doc/html/rfc8555) providers such as Let's Encrypt for [NJS](https://nginx.org/en/docs/njs/). The source code is compatible with the `ngx_http_js_module` runtime. This allows for the automatic issue of TLS/SSL certificates for NGINX.
