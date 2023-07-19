@@ -317,8 +317,8 @@ function getSignatureParameters(
  */
 export async function createCsr(params: {
   keySize?: number
-  commonName?: string
-  altNames?: string[]
+  commonName: string
+  altNames: string[]
   country?: string
   state?: string
   locality?: string
@@ -392,23 +392,25 @@ function createAttributeTypeAndValue(
   })
 }
 
-function getAltNames(params: {
+function getServerNamesAsGeneralNames(params: {
   commonName?: string
   altNames?: string[]
 }): pkijs.GeneralName[] {
   const altNames: pkijs.GeneralName[] = []
 
-  if (params.altNames) {
-    altNames.push(
-      ...params.altNames.map((altName) => createGeneralName(2, altName))
-    )
-  }
-
+  // add common name first so that it becomes the cert common name
   if (
     params.commonName &&
     !altNames.some((name) => name.toString() === params.commonName)
   ) {
     altNames.push(createGeneralName(2, params.commonName))
+  }
+
+  // altNames follow common name
+  if (params.altNames) {
+    altNames.push(
+      ...params.altNames.map((altName) => createGeneralName(2, altName))
+    )
   }
 
   return altNames
@@ -423,18 +425,20 @@ function createGeneralName(
 
 async function addExtensions(
   pkcs10: pkijs.CertificationRequest,
-  params: { commonName?: string; altNames?: string[] },
+  params: { commonName: string; altNames: string[] },
   publicKey: CryptoKey
 ) {
-  const altNames = getAltNames(params)
-
   await pkcs10.subjectPublicKeyInfo.importKey(publicKey, pkijs.getCrypto(true))
   const subjectKeyIdentifier = await getSubjectKeyIdentifier(pkcs10)
-  const altNamesGNs = new pkijs.GeneralNames({ names: altNames })
+
+  // Note that the set of AltNames must also include the commonName.
+  const serverNamesGNs = new pkijs.GeneralNames({
+    names: getServerNamesAsGeneralNames(params),
+  })
   const extensions = new pkijs.Extensions({
     extensions: [
       createExtension('2.5.29.14', subjectKeyIdentifier), // SubjectKeyIdentifier
-      createExtension('2.5.29.17', altNamesGNs.toSchema()), // SubjectAltName
+      createExtension('2.5.29.17', serverNamesGNs.toSchema()), // SubjectAltName
     ],
   })
   pkcs10.attributes = []
@@ -656,30 +660,36 @@ export function pemToBuffer(pem: string, tag: PemTag = 'PRIVATE KEY'): Buffer {
   )
 }
 
+export type CertificateInfo = {
+  issuer: {
+    [x: string]: string
+  }[]
+  domains: CertDomains
+  notBefore: Date
+  notAfter: Date
+}
 /**
  * Read information from a certificate
  * If multiple certificates are chained, the first will be read
  *
  * @param {buffer|string} certPem PEM encoded certificate or chain
- * @returns {object} Certificate info
+ * @returns {CertificateInfo} Certificate info
  */
 export async function readCertificateInfo(
   certPem: string
-): Promise<Record<string, unknown>> {
-  const domains = readCsrDomainNames(certPem)
+): Promise<CertificateInfo> {
   const certBuffer = pemToBuffer(certPem, 'CERTIFICATE')
   const cert = pkijs.Certificate.fromBER(certBuffer)
 
   const issuer = cert.issuer.typesAndValues.map((typeAndValue) => ({
     [typeAndValue.type]: typeAndValue.value.valueBlock.value,
   }))
-  const notBefore = cert.notBefore.value
-  const notAfter = cert.notAfter.value
+
   return {
-    issuer: issuer,
-    domains: domains,
-    notBefore: notBefore,
-    notAfter: notAfter,
+    issuer,
+    domains: readX509ServerNames(certPem),
+    notBefore: cert.notBefore.value,
+    notAfter: cert.notAfter.value,
   }
 }
 
@@ -709,24 +719,52 @@ export function splitPemChain(chainPem: Buffer | string): (string | null)[] {
   )
 }
 
-/**
- * Reads the common name and alternative names from a CSR (Certificate Signing Request).
- * @param csrPem The PEM-encoded CSR string or a Buffer containing the CSR.
- * @returns An object with the commonName and altNames extracted from the CSR.
- *          If the CSR does not have alternative names, altNames will be false.
- */
-export function readCsrDomainNames(csrPem: string | Buffer): {
+export type CertDomains = {
   commonName: string
-  altNames: string[] | false
-} {
-  if (Buffer.isBuffer(csrPem)) {
-    csrPem = csrPem.toString()
+  altNames: string[]
+}
+/**
+ * Given a `domains` object, which follows the format returned by readX509ServerNames(),
+ * returns
+ * @param domains CertDomains
+ */
+export function uniqueDomains(domains: CertDomains): string[] {
+  const uniqueDomains = [domains.commonName]
+  for (const altName of domains.altNames) {
+    if (uniqueDomains.indexOf(altName) === -1) {
+      uniqueDomains.push(altName)
+    }
   }
-  const csr = x509.parse_pem_cert(csrPem)
+  return uniqueDomains
+}
+
+/**
+ * Reads the common name and alternative names from a PEM-formatted cert or CSR
+ * (Certificate Signing Request).
+ * @param certPem The PEM-encoded cert or CSR string or a Buffer containing the same.
+ * @returns An object with the commonName and altNames extracted from the cert/CSR.
+ *          If the cert does not have alternative names, altNames will be empty.
+ */
+export function readX509ServerNames(certPem: string | Buffer): CertDomains {
+  if (Buffer.isBuffer(certPem)) {
+    certPem = certPem.toString()
+  }
+  const csr = x509.parse_pem_cert(certPem)
+
+  // for some reason, get_oid_value for altNames returns a nested array, e.g.
+  // [['host1','host2']], so make it a normal array if necessary
+  let altNames: string[] = []
+  const origAltNames = x509.get_oid_value(
+    csr,
+    '2.5.29.17'
+  ) as unknown as string[][]
+  if (origAltNames && origAltNames[0] && origAltNames[0][0]) {
+    altNames = origAltNames[0]
+  }
 
   return {
     commonName: x509.get_oid_value(csr, '2.5.4.3'),
-    altNames: x509.get_oid_value(csr, '2.5.29.17'),
+    altNames,
   }
 }
 
@@ -760,6 +798,31 @@ export function getVariable(
     throw new Error(errMsg)
   }
   return retval
+}
+
+/**
+ * Return the hostname to use as the common name for issued certs. This is the first hostname in the njs_acme_server_names variable.
+ * @param r request
+ * @returns {string} hostname
+ */
+export function acmeCommonName(r: NginxHTTPRequest): string {
+  // The first name is the common name
+  return acmeServerNames(r)[0]
+}
+
+/**
+ * Return the hostname to use as the common name for issued certs. This is the first hostname in the njs_acme_server_names variable.
+ * @param r request
+ * @returns {string} hostname
+ */
+export function acmeAltNames(r: NginxHTTPRequest): string[] {
+  const serverNames = acmeServerNames(r)
+  if (serverNames.length <= 1) {
+    // no alt names
+    return []
+  }
+  // Return everything after the first name
+  return serverNames.slice(1)
 }
 
 /**
@@ -840,6 +903,18 @@ export function acmeVerifyProviderHTTPS(r: NginxHTTPRequest): boolean {
         .trim()
     ) > -1
   )
+}
+
+export function areEqualSets(arr1: string[], arr2: string[]): boolean {
+  if (arr1.length !== arr2.length) {
+    return false
+  }
+  for (const elem of arr1) {
+    if (arr2.indexOf(elem) === -1) {
+      return false
+    }
+  }
+  return true
 }
 
 /**

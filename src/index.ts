@@ -1,18 +1,21 @@
 import {
-  toPEM,
-  readOrCreateAccountKey,
-  generateKey,
-  createCsr,
-  readCertificateInfo,
-  acmeServerNames,
-  getVariable,
-  joinPaths,
-  acmeDir,
-  acmeChallengeDir,
   acmeAccountPrivateJWKPath,
+  acmeAltNames,
+  acmeChallengeDir,
+  acmeCommonName,
+  acmeDir,
   acmeDirectoryURI,
+  acmeServerNames,
   acmeVerifyProviderHTTPS,
   acmeZoneName,
+  areEqualSets,
+  createCsr,
+  generateKey,
+  getVariable,
+  joinPaths,
+  readCertificateInfo,
+  readOrCreateAccountKey,
+  toPEM,
 } from './utils'
 import { HttpClient } from './api'
 import { AcmeClient } from './client'
@@ -21,6 +24,7 @@ import { LogLevel, Logger } from './logger'
 
 const KEY_SUFFIX = '.key'
 const CERTIFICATE_SUFFIX = '.crt'
+const CERTIFICATE_REQ_SUFFIX = '.csr'
 const log = new Logger()
 
 /**
@@ -62,11 +66,11 @@ async function clientNewAccount(r: NginxHTTPRequest): Promise<void> {
 async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
   const log = new Logger('auto')
   const prefix = acmeDir(r)
-  const serverNames = acmeServerNames(r)
+  const commonName = acmeCommonName(r)
+  const altNames = acmeAltNames(r)
 
-  const commonName = serverNames[0]
   const pkeyPath = joinPaths(prefix, commonName + KEY_SUFFIX)
-  const csrPath = joinPaths(prefix, commonName + '.csr')
+  const csrPath = joinPaths(prefix, commonName + CERTIFICATE_REQ_SUFFIX)
   const certPath = joinPaths(prefix, commonName + CERTIFICATE_SUFFIX)
 
   let email
@@ -88,16 +92,31 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
     const privateKeyData = fs.readFileSync(pkeyPath, 'utf8')
 
     certInfo = await readCertificateInfo(certData)
-    // Calculate the date 30 days before the certificate expiration
-    const renewalThreshold = new Date(certInfo.notAfter as string)
-    renewalThreshold.setDate(renewalThreshold.getDate() - 30)
 
-    const currentDate = new Date()
-    if (currentDate > renewalThreshold) {
+    const configDomains = acmeServerNames(r)
+    const certDomains = certInfo.domains.altNames // altNames includes the common name
+
+    if (!areEqualSets(certDomains, configDomains)) {
+      log.info(
+        `Renewing certificate because the hostnames in the certificate (${certDomains.join(
+          ', '
+        )}) do not match the configured njs_acme_server_names (${configDomains.join(
+          ','
+        )})`
+      )
       renewCertificate = true
     } else {
-      certificatePem = certData
-      pkeyPem = privateKeyData
+      // Calculate the date 30 days before the certificate expiration
+      const renewalThreshold = new Date(certInfo.notAfter)
+      renewalThreshold.setDate(renewalThreshold.getDate() - 30)
+
+      const currentDate = new Date()
+      if (currentDate > renewalThreshold) {
+        renewCertificate = true
+      } else {
+        certificatePem = certData
+        pkeyPem = privateKeyData
+      }
     }
   } catch {
     renewCertificate = true
@@ -117,17 +136,17 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
 
     // Create a new CSR
     const params = {
-      altNames: serverNames.length > 1 ? serverNames.slice(1) : [],
-      commonName: commonName,
+      commonName,
+      altNames,
       emailAddress: email,
     }
 
-    const result = await createCsr(params)
-    fs.writeFileSync(csrPath, toPEM(result.pkcs10Ber, 'CERTIFICATE REQUEST'))
+    const csr = await createCsr(params)
+    fs.writeFileSync(csrPath, toPEM(csr.pkcs10Ber, 'CERTIFICATE REQUEST'))
 
     const privKey = (await crypto.subtle.exportKey(
       'pkcs8',
-      result.keys.privateKey
+      csr.keys.privateKey
     )) as ArrayBuffer
     pkeyPem = toPEM(privKey, 'PRIVATE KEY')
     fs.writeFileSync(pkeyPath, pkeyPem)
@@ -146,8 +165,8 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
     }
 
     certificatePem = await client.auto({
-      csr: Buffer.from(result.pkcs10Ber),
-      email: email,
+      csr: Buffer.from(csr.pkcs10Ber),
+      email,
       termsOfServiceAgreed: true,
       challengeCreateFn: async (authz, challenge, keyAuthorization) => {
         log.info('Challenge Create', { authz, challenge, keyAuthorization })
@@ -272,8 +291,7 @@ function read_cert_or_key(r: NginxHTTPRequest, suffix: string) {
   let data = ''
   let path = ''
   const prefix = acmeDir(r)
-  const serverNames = acmeServerNames(r)
-  const commonName = serverNames[0].toLowerCase()
+  const commonName = acmeCommonName(r)
   const zone = acmeZoneName(r)
   path = joinPaths(prefix, commonName + suffix)
   const key = ['acme', path].join(':')

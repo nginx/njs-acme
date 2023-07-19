@@ -50,6 +50,10 @@ services:
       timeout: 90s
       retries: 3
       start_period: 10s
+    networks:
+      default:
+        aliases:
+          - proxy2.nginx.com
 volumes:
   certs:
   node_dist:

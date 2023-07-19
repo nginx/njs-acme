@@ -3,9 +3,10 @@ import { LogLevel, Logger } from './logger'
 import {
   formatResponseError,
   getPemBodyAsB64u,
-  readCsrDomainNames,
+  readX509ServerNames,
   retry,
   toPEM,
+  uniqueDomains,
 } from './utils'
 import OGCrypto from 'crypto'
 
@@ -941,31 +942,11 @@ async function auto(
     throw new Error('csr is required')
   }
 
-  const csrDomains = readCsrDomainNames(toPEM(opts.csr, 'CERTIFICATE REQUEST'))
-
-  // Work around issue in x509.get_oid_value (called from readCsrDomainNames)
-  // where altNames comes back as an Array in an Array, e.g.:
-  //   [[ 'hostname1', 'hostname2' ]]
-  // We just want an Array:
-  //   [ 'hostname1', 'hostname2' ]
-  const uniqueDomains = [csrDomains.commonName]
-  // Hacky stuff to make Typescript happy
-  const origAltNames = csrDomains.altNames as unknown as string[][]
-  let altNames = csrDomains.altNames
-  if (altNames && altNames[0] && altNames[0][0]) {
-    altNames = origAltNames[0]
-  }
-
-  if (altNames) {
-    for (const altName of altNames) {
-      if (uniqueDomains.indexOf(altName) === -1) {
-        uniqueDomains.push(altName)
-      }
-    }
-  }
+  const csrDomains = readX509ServerNames(toPEM(opts.csr, 'CERTIFICATE REQUEST'))
+  const domains = uniqueDomains(csrDomains)
 
   log.info(
-    `Resolved ${uniqueDomains.length} unique domains (${uniqueDomains.join(
+    `Resolved ${domains.length} unique domains (${domains.join(
       ', '
     )}) from parsing the Certificate Signing Request`
   )
@@ -974,7 +955,7 @@ async function auto(
    * Place order
    */
   const orderPayload = {
-    identifiers: uniqueDomains.map((d) => ({ type: 'dns', value: d })),
+    identifiers: domains.map((d) => ({ type: 'dns', value: d })),
   }
   const order = await client.createOrder(orderPayload)
   const authorizations = await client.getAuthorizations(order)
