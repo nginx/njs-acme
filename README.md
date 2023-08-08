@@ -1,6 +1,6 @@
-[![CI](https://github.com/nginxinc/njs-acme/actions/workflows/ci.yaml/badge.svg)](https://github.com/nginxinc/njs-acme/actions/workflows/ci.yaml)
+[![CI](https://github.com/nginx/njs-acme/actions/workflows/ci.yaml/badge.svg)](https://github.com/nginx/njs-acme/actions/workflows/ci.yaml)
 [![Project Status: Concept – Minimal or no implementation has been done yet, or the repository is only intended to be a limited example, demo, or proof-of-concept.](https://www.repostatus.org/badges/latest/concept.svg)](https://www.repostatus.org/#concept)
-[![Community Support](https://badgen.net/badge/support/community/cyan?icon=awesome)](https://github.com/nginxinc/njs-acme/discussions)
+[![Community Support](https://badgen.net/badge/support/community/cyan?icon=awesome)](https://github.com/nginx/njs-acme/discussions)
 
 
 
@@ -285,10 +285,10 @@ Look at `clientAutoMode` in [`src/index.ts`](./src/index.ts) to see how you can 
 
 ## Contributing
 
-Please see the [contributing guide](https://github.com/nginxinc/njs-acme-experemental/blob/main/CONTRIBUTING.md) for guidelines on how to best contribute to this project.
+Please see the [contributing guide](https://github.com/nginx/njs-acme/blob/main/CONTRIBUTING.md) for guidelines on how to best contribute to this project.
 
 ## License
 
-[Apache License, Version 2.0](https://github.com/nginxinc/njs-acme-experemental/blob/main/LICENSE)
+[Apache License, Version 2.0](https://github.com/nginx/njs-acme/blob/main/LICENSE)
 
 &copy; [F5, Inc.](https://www.f5.com/) 2023

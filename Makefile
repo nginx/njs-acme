@@ -4,8 +4,8 @@ GREP               ?= $(shell command -v ggrep 2> /dev/null || command -v grep 2
 AWK                ?= $(shell command -v gawk 2> /dev/null || command -v awk 2> /dev/null)
 DOCKER             ?= docker
 PROJECT_NAME       ?= njs-acme
-DOCKER_IMAGE_NAME  ?= nginxinc/nginx-$(PROJECT_NAME)
-GITHUB_REPOSITORY  ?= nginxinc/$(PROJECT_NAME)
+DOCKER_IMAGE_NAME  ?= nginx/nginx-$(PROJECT_NAME)
+GITHUB_REPOSITORY  ?= nginx/$(PROJECT_NAME)
 SRC_REPO           := https://github.com/$(GITHUB_REPOSITORY)
 
 Q = $(if $(filter 1,$V),,@)

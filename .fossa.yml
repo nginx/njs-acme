@@ -1,6 +1,6 @@
 version: 3
 
 project:
-  id: github.com/nginxinc/njs-acme
+  id: github.com/nginx/njs-acme
   name: njs-acme
-  url: github.com/nginxinc/njs-acme
+  url: github.com/nginx/njs-acme

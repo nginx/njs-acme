@@ -9,15 +9,15 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nginxinc/njs-acme.git"
+    "url": "git+https://github.com/nginx/njs-acme.git"
   },
   "keywords": [],
   "author": "",
   "license": "APACHE-2.0",
   "bugs": {
-    "url": "https://github.com/nginxinc/njs-acme/issues"
+    "url": "https://github.com/nginx/njs-acme/issues"
   },
-  "homepage": "https://github.com/nginxinc/njs-acme#readme",
+  "homepage": "https://github.com/nginx/njs-acme#readme",
   "engines": {
     "node": ">= 14.15"
   },

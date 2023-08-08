@@ -2,7 +2,7 @@
 
 ## Latest Versions
 
-We advise users to run or update to the most recent release of the njs_acme_experemental. Older versions of the njs_acme_experemental may not have all enhancements and/or bug fixes applied to them.
+We advise users to run or update to the most recent release of the njs-acme. Older versions of the njs-acme may not have all enhancements and/or bug fixes applied to them.
 
 ## Reporting a Vulnerability
 
