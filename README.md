@@ -2,7 +2,7 @@
 [![Project Status: Concept – Minimal or no implementation has been done yet, or the repository is only intended to be a limited example, demo, or proof-of-concept.](https://www.repostatus.org/badges/latest/concept.svg)](https://www.repostatus.org/#concept)
 [![Community Support](https://badgen.net/badge/support/community/cyan?icon=awesome)](https://github.com/nginx/njs-acme/discussions)
 
-
+![NJS + ACME = Certs!](images/banner.png)
 
 # njs-acme
 
@@ -12,6 +12,42 @@ Requires at least `njs-0.8.0`, which is included with NGINX since nginx-1.25.**?
 
 NOTE: Some ACME providers have strict rate limits. Please consult with your provider. For Let's Encrypt refer to their [rate-limits documentation](https://letsencrypt.org/docs/rate-limits/).
 
+## Installation
+
+There are a few options for using this repo. You can build a docker image to replace your existing NGINX image, use Docker to build the `acme.js` file, or build `acme.js` using a locally installed Node.js toolkit.
+
+### Creating a Docker Image
+To create an Nginx+NJS+njs-acme docker image, simply run:
+```
+> make docker-build
+...
+ => exporting to image
+ => => exporting layers
+ => => writing image ...
+ => => naming to docker.io/nginx/nginx-njs-acme
+```
+This will build an image with a recent version of NGINX, required njs version, and the `acme.js` file installed at `/usr/lib/nginx/njs_modules/`.
+
+The image will be tagged `nginx/nginx-njs-acme`, where you can use it in place of a standard `nginx` image.
+
+### Building `acme.js` With Docker
+
+If you do not want to have to worry about installing Node.js and other build dependencies, then you can run this command:
+```
+make docker-copy
+```
+
+This will build the full image and copy the `acme.js` file to the local `dist/` directory.
+
+### Building `acme.js` Without Docker
+
+If you have node.js and NPM installed on your computer, you can run this command to generate `acme.js` directly:
+```
+npm ci
+make build
+```
+
+This will generate `dist/acme.js`, where you can then integrate it into your existing NGINX/NJS environment.
 
 ## Configuration Variables
 
@@ -126,12 +162,18 @@ and keys in shared memory, then set variable with the zone name.
   }
   ```
 
-* Location, that when requested, inspects the stored certificate (if present) and will request a new certificate if necessary. The included `docker-compose.yml` shows how to use a `healthcheck:` configuration for the NGINX service to periodically request this endpoint.
-    ```nginx
-    location = /acme/auto {
-      js_content acme.clientAutoMode;
-    }
-    ```
+* Location, that when requested, inspects the stored certificate (if present) and will request a new certificate if necessary. The included `docker-compose.yml` shows how to use a `healthcheck:` configuration for the NGINX service to periodically request this endpoint.  This should usually be restricted to local or Docker network requests to avoid it being abused. NGINX's [ngx_http_access_module](http://nginx.org/en/docs/http/ngx_http_access_module.html) provides functionality to allow or deny requests. You can look for requests to `/acme/auto` in the NGINX access log entries to find the client IP address to allow.
+  ```nginx
+  location = /acme/auto {
+    js_content acme.clientAutoMode;
+    # Make sure you are not exposing this location to the Internet.
+    # Allow only the IP or IP range of the host making automated /acme/auto requests.
+    # You will probably need to customize the `allow` address(es) below.
+    # allow 192.168.1.0/24;
+    # allow 2001:0db8::/32;
+    # deny all;
+  }
+  ```
 
 ## Automatic Certificate Renewal
 
@@ -203,35 +245,6 @@ To follow these steps, you will need to have Node.js version 14.15 or greater in
         npm run watch
 
 3. Edit the source files. When you save a change, the watcher will rebuild `./dist/acme.js` or display errors.
-
-
-## Building the `acme.js` File
-
-### With Docker
-
-Run this command to build an NGINX container that has the `acme.js` file and an example config loaded:
-
-    make docker-build
-
-You can then copy the created `acme.js` file out of the container with this command:
-
-    make docker-copy
-The `acme.js` file will then be copied into the `dist/` directory.
-
-
-### Without Docker
-
-To build `acme.js` from the TypeScript source, first ensure that you have Node.js (at least version 14.15) installed on your machine, then:
-
-1. Install dependencies
-
-        npm ci
-
-1. Build it:
-
-        npm run build
-
-1. `./dist/acme.js`  would contain the JavaScript code
 
 
 ## Testing
