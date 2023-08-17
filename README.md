@@ -177,9 +177,30 @@ and keys in shared memory, then set variable with the zone name.
 
 ## Automatic Certificate Renewal
 
-NGINX and NJS do not yet have a mechanism for running code on a time interval, which presents a challenge for certificate renewal. One workaround to this is to set something up to periodically request `/acme/auto` from the NGINX server.
+Certificate renewal is automatically managed through active healthchecks to send a `GET` request to `/acme/auto` every 90 seconds. The relevant configuration section is
 
-If running directly on a host, you can use `cron` to schedule a periodic request. When deploying in Kubernetes you can use a [liveness-check](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-http-request). If you are running in a `docker` context, you can use Docker's `healthcheck:` functionality to do this.
+```nginx
+  # Internal upstream for automated certificates renewal
+  upstream acme_auto_renewal {
+    zone acme_auto_renewal 64k;
+    server 127.0.0.1:8000;
+  }
+
+  ## Internal certificates renewal server
+  # GETs 127.0.0.1:8000/acme/auto every 90 seconds to automatically renews certificates
+  server {
+    location /internal_auto_renewal {
+      internal;
+
+      health_check interval=90;
+      health_check uri=/acme/auto;
+      proxy_pass http://acme_auto_renewal;
+    }
+  }
+
+```
+
+As an alternative you can comment out this section and use `cron` to schedule a periodic request. When deploying in Kubernetes you can use a [liveness-check](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-http-request). If you are running in a `docker` context, you can use Docker's `healthcheck:` functionality to do this.
 
 Here is an example using `docker compose`:
 
