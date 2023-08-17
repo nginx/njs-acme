@@ -177,30 +177,35 @@ and keys in shared memory, then set variable with the zone name.
 
 ## Automatic Certificate Renewal
 
-Certificate renewal is automatically managed through active healthchecks to send a `GET` request to `/acme/auto` every 90 seconds. The relevant configuration section is
+If using NGINX Plus, certificate renewal is automatically managed through active healthchecks to send a `GET` request to `/acme/auto` every 90 seconds. The relevant configuration section is
 
 ```nginx
-  # Internal upstream for automated certificates renewal
+  # Internal upstream for automated certificates renewal - requires NGINX Plus
   upstream acme_auto_renewal {
     zone acme_auto_renewal 64k;
-    server 127.0.0.1:8000;
+    server 127.0.0.1:10080;
   }
 
-  ## Internal certificates renewal server
-  # GETs 127.0.0.1:8000/acme/auto every 90 seconds to automatically renews certificates
+  ## Internal certificates renewal server - requires NGINX Plus
+  # GETs proxy.nginx.com:8000/acme/auto every 90 seconds to automatically renews certificates
   server {
-    location /internal_auto_renewal {
-      internal;
+    listen 127.0.0.1:10080;
 
+    location / {
+      internal; 
       health_check interval=90;
-      health_check uri=/acme/auto;
+      health_check uri=/internal_auto_renewal;
       proxy_pass http://acme_auto_renewal;
     }
-  }
 
+    location = /internal_auto_renewal {
+      proxy_set_header Host proxy.nginx.com;
+      proxy_pass http://127.0.0.1:8000/acme/auto;
+    }
+  }
 ```
 
-As an alternative you can comment out this section and use `cron` to schedule a periodic request. When deploying in Kubernetes you can use a [liveness-check](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-http-request). If you are running in a `docker` context, you can use Docker's `healthcheck:` functionality to do this.
+When using NGINX Opensource you can comment out this section and use `cron` to schedule a periodic request. When deploying in Kubernetes you can use a [liveness-check](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-http-request). If you are running in a `docker` context, you can use Docker's `healthcheck:` functionality to do this.
 
 Here is an example using `docker compose`:
 
