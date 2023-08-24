@@ -177,6 +177,30 @@ and keys in shared memory, then set variable with the zone name.
 
 ## Automatic Certificate Renewal
 
+### NGINX opensource
+
+NGINX opensource and NJS do not yet have a mechanism for running code on a time interval, which presents a challenge for certificate renewal. One workaround to this is to set something up to periodically request `/acme/auto` from the NGINX server.
+
+If running directly on a host, you can use `cron` to schedule a periodic request. When deploying in Kubernetes you can use a [liveness-check](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-http-request). If you are running in a `docker` context, you can use Docker's `healthcheck:` functionality to do this.
+
+Here is an example using `docker compose`:
+
+```docker
+service:
+  nginx:
+    ...
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://proxy.nginx.com:8000/acme/auto"]
+      interval: 90s
+      timeout: 90s
+      retries: 3
+      start_period: 10s
+```
+
+This configuration will request `/acme/auto` every 90 seconds. If the certificate is nearing expiry, it will be automatically renewed.
+
+### NGINX Plus
+
 If using NGINX Plus, certificate renewal is automatically managed through active healthchecks to send a `GET` request to `/acme/auto` every 90 seconds. The relevant configuration section is
 
 ```nginx
@@ -205,23 +229,16 @@ If using NGINX Plus, certificate renewal is automatically managed through active
   }
 ```
 
-When using NGINX Opensource you can comment out this section and use `cron` to schedule a periodic request. When deploying in Kubernetes you can use a [liveness-check](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-http-request). If you are running in a `docker` context, you can use Docker's `healthcheck:` functionality to do this.
+This configuration will request `/acme/auto` every 90 seconds. If the certificate is nearing expiry, it will be automatically renewed.
 
-Here is an example using `docker compose`:
+In order to use NGINX Plus and automated certificate renewal you will need to use `examples/nginxplus.conf` as the main configuration file by running:
 
-```docker
-service:
-  nginx:
-    ...
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://proxy.nginx.com:8000/acme/auto"]
-      interval: 90s
-      timeout: 90s
-      retries: 3
-      start_period: 10s
+```
+cp examples/nginxplus.conf examples/nginx.conf
 ```
 
-This configuration will request `/acme/auto` every 90 seconds. If the certificate is nearing expiry, it will be automatically renewed.
+and then following the installation instructions above here
+
 
 ## Advanced
 ### Serving challenges directly
