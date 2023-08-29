@@ -8,7 +8,7 @@
 
 This repository provides a JavaScript library to work with [ACME](https://datatracker.ietf.org/doc/html/rfc8555) providers such as Let's Encrypt for [NJS](https://nginx.org/en/docs/njs/). The source code is compatible with the `ngx_http_js_module` runtime. This allows for the automatic issue of TLS/SSL certificates for NGINX.
 
-Requires at least `njs-0.8.0`, which is included with NGINX since nginx-1.25.**???-TBD**.
+Requires at least `njs-0.8.1`, which is included with NGINX since nginx-1.26.**???-TBD**.
 
 NOTE: Some ACME providers have strict rate limits. Please consult with your provider. For Let's Encrypt refer to their [rate-limits documentation](https://letsencrypt.org/docs/rate-limits/).
 
@@ -41,17 +41,21 @@ This will build the full image and copy the `acme.js` file to the local `dist/` 
 
 ### Building `acme.js` Without Docker
 
-If you have node.js and NPM installed on your computer, you can run this command to generate `acme.js` directly:
+If you have Node.js and NPM installed on your computer, you can run this command to generate `acme.js` directly:
 ```
 npm ci
 make build
 ```
 
-This will generate `dist/acme.js`, where you can then integrate it into your existing NGINX/NJS environment.
+This will generate `dist/acme.js`, where you can then integrate it into your existing NGINX / NJS environment.
 
 ## Configuration Variables
 
-You can use environment variables or NGINX configuration variables to control the behavior of the NJS ACME client. In the case where both are defined, environment variables take precedence. Environment variables are in `ALL_CAPS`, whereas the nginx config variable is the same name, just `lower_case`.
+You can use environment variables or NGINX `js_var` directives to control the behavior of the NJS ACME client.
+
+In the case where both are defined, environment variables take precedence. Environment variables are in `ALL_CAPS`, whereas the nginx config variable is the same name, just prefixed with a dollar sign and `$lower_case`.
+
+For example, `NJS_ACME_SERVER_NAMES` (env var) vs. `$njs_acme_server_names` (js_var).
 
 ### Required Variables
 
@@ -128,17 +132,21 @@ There are a few pieces that are required to be present in your `nginx.conf` file
   ```nginx
   js_shared_dict_zone zone=acme:1m
   ```
+  * NOTE: If you want to use a different `js_shared_dict_zone` name, then you need to define the variable `$njs_acme_shared_dict_zone_name` with the name you would like to use.
+    ```nginx
+    js_var $njs_acme_shared_dict_zone_name acme;
+    ```
 
 ### `server` Section
-* Set the hostname or hostnames (space-separated) to generate the certificate.
-This may also be defined with the environment variable `NJS_ACME_SERVER_NAMES`.
-  ```nginx
-  js_var $njs_acme_server_names proxy.nginx.com;
-  ```
 * Set your email address to use to configure your ACME account. This may also
 be defined with the environment variable `NJS_ACME_ACCOUNT_EMAIL`.
   ```nginx
   js_var $njs_acme_account_email test@example.com;
+  ```
+* Set the hostname or hostnames (space-separated) to generate the certificate.
+This may also be defined with the environment variable `NJS_ACME_SERVER_NAMES`.
+  ```nginx
+  js_var $njs_acme_server_names 'proxy.nginx.com proxy2.nginx.com';
   ```
 * Set and use variables to hold the certificate and key paths using Javascript.
   ```nginx
@@ -148,11 +156,6 @@ be defined with the environment variable `NJS_ACME_ACCOUNT_EMAIL`.
   ssl_certificate data:$dynamic_ssl_cert;
   ssl_certificate_key data:$dynamic_ssl_key;
   ```
-* You may use `js_shared_dict_zone` to improve performance and cache certificates
-and keys in shared memory, then set variable with the zone name.
-  ```nginx
-  js_var $njs_acme_shared_dict_zone_name acme;
-  ```
 
 ### `location` Blocks
 * Location to handle ACME challenge requests.
@@ -161,44 +164,21 @@ and keys in shared memory, then set variable with the zone name.
     js_content acme.challengeResponse;
   }
   ```
-
-* Location, that when requested, inspects the stored certificate (if present) and will request a new certificate if necessary. The included `docker-compose.yml` shows how to use a `healthcheck:` configuration for the NGINX service to periodically request this endpoint.  This should usually be restricted to local or Docker network requests to avoid it being abused. NGINX's [ngx_http_access_module](http://nginx.org/en/docs/http/ngx_http_access_module.html) provides functionality to allow or deny requests. You can look for requests to `/acme/auto` in the NGINX access log entries to find the client IP address to allow.
+* Locations to trigger and handle requests to automatically request or renew certificates if necessary.
   ```nginx
+  location @acmePeriodicAuto {
+    js_periodic acme.periodicAuto interval=1m;
+  }
   location = /acme/auto {
     js_content acme.clientAutoMode;
     # Make sure you are not exposing this location to the Internet.
-    # Allow only the IP or IP range of the host making automated /acme/auto requests.
-    # You will probably need to customize the `allow` address(es) below.
-    # allow 192.168.1.0/24;
-    # allow 2001:0db8::/32;
-    # deny all;
+    allow 127.0.0.1;
+    deny all;
   }
   ```
 
-## Automatic Certificate Renewal
-
-NGINX and NJS do not yet have a mechanism for running code on a time interval, which presents a challenge for certificate renewal. One workaround to this is to set something up to periodically request `/acme/auto` from the NGINX server.
-
-If running directly on a host, you can use `cron` to schedule a periodic request. When deploying in Kubernetes you can use a [liveness-check](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-http-request). If you are running in a `docker` context, you can use Docker's `healthcheck:` functionality to do this.
-
-Here is an example using `docker compose`:
-
-```docker
-service:
-  nginx:
-    ...
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://proxy.nginx.com:8000/acme/auto"]
-      interval: 90s
-      timeout: 90s
-      retries: 3
-      start_period: 10s
-```
-
-This configuration will request `/acme/auto` every 90 seconds. If the certificate is nearing expiry, it will be automatically renewed.
-
 ## Advanced
-### Serving challenges directly
+### Serving challenges directly from disk (not via njs)
   If you do not wish to use `js_content acme.challengeResponse` to respond to challenge requests, then you can serve them directly with NGINX. Just be sure that the `root` directive value in your location block matches the value of `$njs_acme_challenge_dir`.
 
   ```nginx

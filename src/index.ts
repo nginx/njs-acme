@@ -25,6 +25,7 @@ import { LogLevel, Logger } from './logger'
 const KEY_SUFFIX = '.key'
 const CERTIFICATE_SUFFIX = '.crt'
 const CERTIFICATE_REQ_SUFFIX = '.csr'
+
 const log = new Logger()
 
 /**
@@ -295,6 +296,8 @@ function read_cert_or_key(r: NginxHTTPRequest, suffix: string) {
   const zone = acmeZoneName(r)
   path = joinPaths(prefix, commonName + suffix)
   const key = ['acme', path].join(':')
+
+  // if the zone is not defined in nginx.conf, then we will bypass the cache
   const cache = zone && ngx.shared && ngx.shared[zone]
 
   if (cache) {
@@ -368,6 +371,20 @@ async function challengeResponse(r: NginxHTTPRequest): Promise<void> {
   }
 }
 
+/*
+ * Handler for the `js_periodic` directive that requests /acme/auto periodically
+ * to validate the stored certitificates.
+ */
+async function periodicAuto(): Promise<void> {
+  // TODO should not need this in the final njs-0.8.1 release
+  if (ngx.worker_id !== 0) {
+    return
+  }
+
+  // make the /acme/auto request to localhost
+  await ngx.fetch('http://localhost/acme/auto')
+}
+
 export default {
   js_cert,
   js_key,
@@ -378,4 +395,5 @@ export default {
   createCsrHandler,
   LogLevel,
   Logger,
+  periodicAuto,
 }
