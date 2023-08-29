@@ -5,9 +5,10 @@ on:
   - push
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  fossa:
+    # This job is only useful when run on upstream
+    if: github.repository == 'nginxinc/ngx-rust' || github.event_name == 'workflow_dispatch'
+    runs-on: FOSSA scan
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
