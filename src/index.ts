@@ -2,6 +2,7 @@ import {
   acmeAccountPrivateJWKPath,
   acmeAltNames,
   acmeChallengeDir,
+  acmeClientAutoModeURL,
   acmeCommonName,
   acmeDir,
   acmeDirectoryURI,
@@ -382,7 +383,7 @@ async function periodicAuto(): Promise<void> {
   }
 
   // make the /acme/auto request to localhost
-  await ngx.fetch('http://localhost/acme/auto')
+  await ngx.fetch(acmeClientAutoModeURL())
 }
 
 export default {
