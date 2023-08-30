@@ -852,7 +852,8 @@ export function acmeServerNames(r: NginxHTTPRequest): string[] {
  */
 export function acmeClientAutoModeURL(): string {
   return (
-    process.env.ACME_CLIENT_AUTO_MODE_URL || 'http://localhost:10999/acme/auto'
+    process.env.NJS_ACME_CLIENT_AUTO_MODE_URL ||
+    'http://localhost:10999/acme/auto'
   )
 }
 
