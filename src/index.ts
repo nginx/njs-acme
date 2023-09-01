@@ -377,11 +377,6 @@ async function challengeResponse(r: NginxHTTPRequest): Promise<void> {
  * to validate the stored certitificates.
  */
 async function periodicAuto(): Promise<void> {
-  // TODO should not need this in the final njs-0.8.1 release
-  if (ngx.worker_id !== 0) {
-    return
-  }
-
   // make the /acme/auto request to localhost
   await ngx.fetch(acmeClientAutoModeURL())
 }
