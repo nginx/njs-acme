@@ -847,17 +847,6 @@ export function acmeServerNames(r: NginxHTTPRequest): string[] {
 }
 
 /**
- * Return a URL to use to fetch the clientAutoMode endpoint
- * @returns clientAutoModeURL
- */
-export function acmeClientAutoModeURL(): string {
-  return (
-    process.env.NJS_ACME_CLIENT_AUTO_MODE_URL ||
-    'http://localhost:10999/acme/auto'
-  )
-}
-
-/**
  * Return the path where ACME magic happens
  * @param r request
  * @returns configured path or default

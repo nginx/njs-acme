@@ -2,7 +2,6 @@ import {
   acmeAccountPrivateJWKPath,
   acmeAltNames,
   acmeChallengeDir,
-  acmeClientAutoModeURL,
   acmeCommonName,
   acmeDir,
   acmeDirectoryURI,
@@ -376,15 +375,6 @@ async function challengeResponse(r: NginxHTTPRequest): Promise<void> {
   }
 }
 
-/*
- * Handler for the `js_periodic` directive that requests /acme/auto periodically
- * to validate the stored certitificates.
- */
-async function periodicAuto(): Promise<void> {
-  // make the /acme/auto request to localhost
-  await ngx.fetch(acmeClientAutoModeURL())
-}
-
 export default {
   js_cert,
   js_key,
@@ -395,5 +385,4 @@ export default {
   createCsrHandler,
   LogLevel,
   Logger,
-  periodicAuto,
 }
