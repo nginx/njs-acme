@@ -26,6 +26,7 @@ import { LogLevel, Logger } from './logger'
 const KEY_SUFFIX = '.key'
 const CERTIFICATE_SUFFIX = '.crt'
 const CERTIFICATE_REQ_SUFFIX = '.csr'
+const RENEWAL_THRESHOLD_DAYS = 30
 
 const log = new Logger()
 
@@ -43,7 +44,7 @@ async function clientNewAccount(r: NginxHTTPRequest): Promise<void> {
   })
   // display more logs
   client.api.minLevel = LogLevel.Debug
-  // do not validate ACME provider cert
+  // conditionally validate ACME provider cert
   client.api.setVerify(acmeVerifyProviderHTTPS(r))
 
   try {
@@ -55,7 +56,7 @@ async function clientNewAccount(r: NginxHTTPRequest): Promise<void> {
   } catch (e) {
     const errMsg = `Error creating ACME account. Error=${e}`
     log.error(errMsg)
-    return r.return(500, errMsg)
+    return null; //r.return(500, errMsg)
   }
 }
 
@@ -79,10 +80,8 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
   try {
     email = getVariable(r, 'njs_acme_account_email')
   } catch {
-    return r.return(
-      500,
-      "Nginx variable 'njs_acme_account_email' or 'NJS_ACME_ACCOUNT_EMAIL' environment variable must be set"
-    )
+    log.error("Nginx variable '$njs_acme_account_email' or 'NJS_ACME_ACCOUNT_EMAIL' environment variable must be set")
+    return false
   }
 
   let certificatePem
@@ -108,12 +107,17 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
       )
       renewCertificate = true
     } else {
-      // Calculate the date 30 days before the certificate expiration
+      // Calculate the date RENEWAL_THRESHOLD_DAYS before the certificate expiration
       const renewalThreshold = new Date(certInfo.notAfter)
-      renewalThreshold.setDate(renewalThreshold.getDate() - 30)
+      renewalThreshold.setDate(
+        renewalThreshold.getDate() - RENEWAL_THRESHOLD_DAYS
+      )
 
       const currentDate = new Date()
       if (currentDate > renewalThreshold) {
+        log.info(
+          `Renewing certificate because the current certificate expires within the renewal threshold of ${RENEWAL_THRESHOLD_DAYS} days.`
+        )
         renewCertificate = true
       } else {
         certificatePem = certData
@@ -124,6 +128,8 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
     renewCertificate = true
   }
 
+  log.info(`in clientAutoMode renew=${renewCertificate}`)
+
   if (renewCertificate) {
     const accountKey = await readOrCreateAccountKey(
       acmeAccountPrivateJWKPath(r)
@@ -133,17 +139,14 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
       directoryUrl: acmeDirectoryURI(r),
       accountKey: accountKey,
     })
-    // client.api.minLevel = LogLevel.Debug; // display more logs
     client.api.setVerify(acmeVerifyProviderHTTPS(r))
 
     // Create a new CSR
-    const params = {
+    const csr = await createCsr({
       commonName,
       altNames,
       emailAddress: email,
-    }
-
-    const csr = await createCsr(params)
+    })
     fs.writeFileSync(csrPath, toPEM(csr.pkcs10Ber, 'CERTIFICATE REQUEST'))
 
     const privKey = (await crypto.subtle.exportKey(
@@ -152,7 +155,7 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
     )) as ArrayBuffer
     pkeyPem = toPEM(privKey, 'PRIVATE KEY')
     fs.writeFileSync(pkeyPath, pkeyPem)
-    log.info(`Wrote Private key to ${pkeyPath}`)
+    log.info(`Wrote private key to ${pkeyPath}`)
 
     const challengePath = acmeChallengeDir(r)
 
@@ -162,8 +165,7 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
       log.error(
         `Error creating directory to store challenges. Ensure the ${challengePath} directory is writable by the nginx user.`
       )
-
-      return r.return(500, 'Cannot create challenge directory')
+      return false
     }
 
     certificatePem = await client.auto({
@@ -175,10 +177,6 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
         log.info(
           `Writing challenge file so nginx can serve it via .well-known/acme-challenge/${challenge.token}`
         )
-        ngx.log(
-          ngx.INFO,
-          `njs-acme: [auto] Writing challenge file so nginx can serve it via ${challengePath}/${challenge.token}`
-        )
         const path = joinPaths(challengePath, challenge.token)
         fs.writeFileSync(path, keyAuthorization)
       },
@@ -186,23 +184,18 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
         const path = joinPaths(challengePath, challenge.token)
         try {
           fs.unlinkSync(path)
-          log.info(`removed challenge ${path}`)
+          log.info(`Removed challenge ${path}`)
         } catch (e) {
-          log.error(`failed to remove challenge ${path}`)
+          log.error(`Failed to remove challenge ${path}`)
         }
       },
     })
     certInfo = await readCertificateInfo(certificatePem)
     fs.writeFileSync(certPath, certificatePem)
-    log.info(`wrote certificate to ${certPath}`)
+    log.info(`Wrote certificate to ${certPath}`)
   }
 
-  const info = {
-    certificate: certInfo,
-    renewedCertificate: renewCertificate,
-  }
-
-  return r.return(200, JSON.stringify(info))
+  return true
 }
 
 /**
@@ -211,12 +204,10 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
  * @returns
  */
 async function acmeNewAccount(r: NginxHTTPRequest): Promise<void> {
-  log.error('VERIFY_PROVIDER_HTTPS:', acmeVerifyProviderHTTPS(r))
-
-  /* Generate a new RSA key pair for ACME account */
+  // Generate a new RSA key pair for ACME account
   const keys = (await generateKey()) as Required<CryptoKeyPair>
 
-  // /* Create a new ACME account */
+  // Create a new ACME account
   const client = new HttpClient(acmeDirectoryURI(r), keys.privateKey)
 
   client.minLevel = LogLevel.Debug
@@ -231,7 +222,7 @@ async function acmeNewAccount(r: NginxHTTPRequest): Promise<void> {
     termsOfServiceAgreed: true,
     contact: ['mailto:test@example.com'],
   }
-  // sends a signed request
+  // Send a signed request
   const sresp = await client.signedRequest(resourceUrl, payload)
 
   const respO = {
@@ -289,13 +280,23 @@ function js_key(r: NginxHTTPRequest): string {
   return read_cert_or_key(r, KEY_SUFFIX)
 }
 
-function read_cert_or_key(r: NginxHTTPRequest, suffix: string) {
+/**
+ * Given a request and suffix that indicates whether the caller wants the cert
+ * or key, return the requested object from cache if possible, falling back to
+ * disk.
+ * @param {NginxHTTPRequest} r - The Nginx HTTP request object.
+ * @param {string} suffix - The file suffix that indicates whether we want a cert or key
+ * @returns
+ */
+function read_cert_or_key(
+  r: NginxHTTPRequest,
+  suffix: typeof CERTIFICATE_SUFFIX | typeof KEY_SUFFIX
+) {
   let data = ''
-  let path = ''
   const prefix = acmeDir(r)
   const commonName = acmeCommonName(r)
   const zone = acmeZoneName(r)
-  path = joinPaths(prefix, commonName + suffix)
+  const path = joinPaths(prefix, commonName + suffix)
   const key = ['acme', path].join(':')
 
   // if the zone is not defined in nginx.conf, then we will bypass the cache
@@ -310,8 +311,8 @@ function read_cert_or_key(r: NginxHTTPRequest, suffix: string) {
   try {
     data = fs.readFileSync(path, 'utf8')
   } catch (e) {
-    data = ''
     log.error('error reading from file:', path, `. Error=${e}`)
+    return ''
   }
   if (cache && data) {
     try {
@@ -325,8 +326,9 @@ function read_cert_or_key(r: NginxHTTPRequest, suffix: string) {
   return data
 }
 
-/*
+/**
  * Demonstrates using js_content to serve challenge responses.
+ * @param {NginxHTTPRequest} the request
  */
 async function challengeResponse(r: NginxHTTPRequest): Promise<void> {
   const challengeUriPrefix = '/.well-known/acme-challenge/'
@@ -340,7 +342,7 @@ async function challengeResponse(r: NginxHTTPRequest): Promise<void> {
   // https://datatracker.ietf.org/doc/html/draft-ietf-acme-acme-07#section-8.3
   // - greater than 128 bits or ~22 base-64 encoded characters.
   //   Let's Encrypt uses a 43-character string.
-  // - base64url characters only
+  // - base64url character set only
 
   // Ensure we're not given a token that is too long (128 chars to be future-proof)
   if (r.uri.length > 128 + challengeUriPrefix.length) {

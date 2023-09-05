@@ -137,7 +137,7 @@ There are a few pieces that are required to be present in your `nginx.conf` file
     js_var $njs_acme_shared_dict_zone_name acme;
     ```
 
-### `server` Section
+### `server` Section(s)
 * Set your email address to use to configure your ACME account. This may also
 be defined with the environment variable `NJS_ACME_ACCOUNT_EMAIL`.
   ```nginx
@@ -164,16 +164,11 @@ This may also be defined with the environment variable `NJS_ACME_SERVER_NAMES`.
     js_content acme.challengeResponse;
   }
   ```
-* Locations to trigger and handle requests to automatically request or renew certificates if necessary.
+* Named location to contain the `js_periodic` directive to automatically
+request or renew certificates if necessary.
   ```nginx
   location @acmePeriodicAuto {
-    js_periodic acme.periodicAuto interval=1m;
-  }
-  location = /acme/auto {
-    js_content acme.clientAutoMode;
-    # Make sure you are not exposing this location to the Internet.
-    allow 127.0.0.1;
-    deny all;
+    js_periodic acme.clientAutoMode interval=1m;
   }
   ```
 
