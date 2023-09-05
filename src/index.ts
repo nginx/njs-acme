@@ -56,7 +56,7 @@ async function clientNewAccount(r: NginxHTTPRequest): Promise<void> {
   } catch (e) {
     const errMsg = `Error creating ACME account. Error=${e}`
     log.error(errMsg)
-    return null; //r.return(500, errMsg)
+    return null
   }
 }
 
