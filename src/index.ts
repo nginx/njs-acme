@@ -31,42 +31,12 @@ const RENEWAL_THRESHOLD_DAYS = 30
 const log = new Logger()
 
 /**
- * Using AcmeClient to create a new account. It creates an account key if it doesn't exists
- * @param {NginxHTTPRequest} r Incoming request
- * @returns void
- */
-async function clientNewAccount(r: NginxHTTPRequest): Promise<void> {
-  const accountKey = await readOrCreateAccountKey(acmeAccountPrivateJWKPath(r))
-  // Create a new ACME account
-  const client = new AcmeClient({
-    directoryUrl: acmeDirectoryURI(r),
-    accountKey: accountKey,
-  })
-  // display more logs
-  client.api.minLevel = LogLevel.Debug
-  // conditionally validate ACME provider cert
-  client.api.setVerify(acmeVerifyProviderHTTPS(r))
-
-  try {
-    const account = await client.createAccount({
-      termsOfServiceAgreed: true,
-      contact: ['mailto:test@example.com'],
-    })
-    return r.return(200, JSON.stringify(account))
-  } catch (e) {
-    const errMsg = `Error creating ACME account. Error=${e}`
-    log.error(errMsg)
-    return null
-  }
-}
-
-/**
  *  Demonstrates an automated workflow to issue a new certificate for `r.variables.server_name`
  *
  * @param {NginxHTTPRequest} r Incoming request
  * @returns void
  */
-async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
+async function clientAutoMode(r: NginxHTTPRequest): Promise<boolean> {
   const log = new Logger('auto')
   const prefix = acmeDir(r)
   const commonName = acmeCommonName(r)
@@ -80,7 +50,9 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
   try {
     email = getVariable(r, 'njs_acme_account_email')
   } catch {
-    log.error("Nginx variable '$njs_acme_account_email' or 'NJS_ACME_ACCOUNT_EMAIL' environment variable must be set")
+    log.error(
+      "Nginx variable '$njs_acme_account_email' or 'NJS_ACME_ACCOUNT_EMAIL' environment variable must be set"
+    )
     return false
   }
 
@@ -196,6 +168,36 @@ async function clientAutoMode(r: NginxHTTPRequest): Promise<void> {
   }
 
   return true
+}
+
+/**
+ * Using AcmeClient to create a new account. It creates an account key if it doesn't exist
+ * @param {NginxHTTPRequest} r Incoming request
+ * @returns void
+ */
+async function clientNewAccount(r: NginxHTTPRequest): Promise<void> {
+  const accountKey = await readOrCreateAccountKey(acmeAccountPrivateJWKPath(r))
+  // Create a new ACME account
+  const client = new AcmeClient({
+    directoryUrl: acmeDirectoryURI(r),
+    accountKey: accountKey,
+  })
+  // display more logs
+  client.api.minLevel = LogLevel.Debug
+  // conditionally validate ACME provider cert
+  client.api.setVerify(acmeVerifyProviderHTTPS(r))
+
+  try {
+    const account = await client.createAccount({
+      termsOfServiceAgreed: true,
+      contact: ['mailto:test@example.com'],
+    })
+    return r.return(200, JSON.stringify(account))
+  } catch (e) {
+    const errMsg = `Error creating ACME account. Error=${e}`
+    log.error(errMsg)
+    return r.return(500, errMsg)
+  }
 }
 
 /**
