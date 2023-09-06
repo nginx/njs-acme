@@ -13,6 +13,7 @@ import {
   generateKey,
   getVariable,
   joinPaths,
+  NginxPeriodicSession,
   readCertificateInfo,
   readOrCreateAccountKey,
   toPEM,
@@ -35,7 +36,7 @@ const log = new Logger()
  * @param {NginxHTTPRequest} r Incoming request
  * @returns void
  */
-async function clientAutoMode(r: NginxHTTPRequest): Promise<boolean> {
+async function clientAutoMode(r: NginxPeriodicSession): Promise<boolean> {
   const log = new Logger('auto')
   const prefix = acmeDir(r)
   const commonName = acmeCommonName(r)

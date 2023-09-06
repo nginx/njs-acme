@@ -8,6 +8,28 @@ import { Logger } from './logger'
 
 const log = new Logger('utils')
 
+/**
+ * TODO DELETE THIS ONCE njs-0.8.1 is released (0.8.1 defines this interface)
+ * NginxPeriodicSession object is available as the first argument in the js_periodic handler.
+ * @since 0.8.1
+ */
+export interface NginxPeriodicSession {
+  /**
+   * nginx variables as Buffers.
+   *
+   * @see variables
+   */
+  readonly rawVariables: NginxRawVariables
+  /**
+   * nginx variables as strings.
+   *
+   * **Warning:** Bytes invalid in UTF-8 encoding may be converted into the replacement character.
+   *
+   * @see rawVariables
+   */
+  readonly variables: NginxVariables
+}
+
 // workaround for PKI.JS to work
 globalThis.unescape = querystring.unescape
 
@@ -778,7 +800,7 @@ export function readX509ServerNames(certPem: string | Buffer): CertDomains {
  * @returns value of the variable
  */
 export function getVariable(
-  r: NginxHTTPRequest,
+  r: NginxHTTPRequest | NginxPeriodicSession,
   varname:
     | 'njs_acme_account_email'
     | 'njs_acme_server_names'
@@ -805,7 +827,9 @@ export function getVariable(
  * @param r request
  * @returns {string} hostname
  */
-export function acmeCommonName(r: NginxHTTPRequest): string {
+export function acmeCommonName(
+  r: NginxHTTPRequest | NginxPeriodicSession
+): string {
   // The first name is the common name
   return acmeServerNames(r)[0]
 }
@@ -815,7 +839,9 @@ export function acmeCommonName(r: NginxHTTPRequest): string {
  * @param r request
  * @returns {string} hostname
  */
-export function acmeAltNames(r: NginxHTTPRequest): string[] {
+export function acmeAltNames(
+  r: NginxHTTPRequest | NginxPeriodicSession
+): string[] {
   const serverNames = acmeServerNames(r)
   if (serverNames.length <= 1) {
     // no alt names
@@ -830,7 +856,9 @@ export function acmeAltNames(r: NginxHTTPRequest): string[] {
  * @param r request
  * @returns array of hostnames
  */
-export function acmeServerNames(r: NginxHTTPRequest): string[] {
+export function acmeServerNames(
+  r: NginxHTTPRequest | NginxPeriodicSession
+): string[] {
   const nameStr = getVariable(r, 'njs_acme_server_names') // no default == mandatory
   // split string value on comma and/or whitespace and lowercase each element
   const names = nameStr.split(/[,\s]+/)
@@ -851,7 +879,7 @@ export function acmeServerNames(r: NginxHTTPRequest): string[] {
  * @param r request
  * @returns configured path or default
  */
-export function acmeDir(r: NginxHTTPRequest): string {
+export function acmeDir(r: NginxHTTPRequest | NginxPeriodicSession): string {
   return getVariable(r, 'njs_acme_dir', '/etc/nginx/njs-acme')
 }
 
@@ -860,7 +888,9 @@ export function acmeDir(r: NginxHTTPRequest): string {
  * @param r request
  * @returns configured shared_dict zone name or default
  */
-export function acmeZoneName(r: NginxHTTPRequest): string {
+export function acmeZoneName(
+  r: NginxHTTPRequest | NginxPeriodicSession
+): string {
   return getVariable(r, 'njs_acme_shared_dict_zone_name', 'acme')
 }
 /**
@@ -868,7 +898,9 @@ export function acmeZoneName(r: NginxHTTPRequest): string {
  * @param r request
  * @returns configured path or default
  */
-export function acmeChallengeDir(r: NginxHTTPRequest): string {
+export function acmeChallengeDir(
+  r: NginxHTTPRequest | NginxPeriodicSession
+): string {
   return getVariable(
     r,
     'njs_acme_challenge_dir',
@@ -878,9 +910,11 @@ export function acmeChallengeDir(r: NginxHTTPRequest): string {
 
 /**
  * Returns the path for the account private JWK
- * @param r {NginxHTTPRequest}
+ * @param r {NginxHTTPRequest | NginxPeriodicSession}
  */
-export function acmeAccountPrivateJWKPath(r: NginxHTTPRequest): string {
+export function acmeAccountPrivateJWKPath(
+  r: NginxHTTPRequest | NginxPeriodicSession
+): string {
   return getVariable(
     r,
     'njs_acme_account_private_jwk',
@@ -890,9 +924,11 @@ export function acmeAccountPrivateJWKPath(r: NginxHTTPRequest): string {
 
 /**
  * Returns the ACME directory URI
- * @param r {NginxHTTPRequest}
+ * @param r {NginxHTTPRequest | NginxPeriodicSession}
  */
-export function acmeDirectoryURI(r: NginxHTTPRequest): string {
+export function acmeDirectoryURI(
+  r: NginxHTTPRequest | NginxPeriodicSession
+): string {
   return getVariable(
     r,
     'njs_acme_directory_uri',
@@ -902,10 +938,12 @@ export function acmeDirectoryURI(r: NginxHTTPRequest): string {
 
 /**
  * Returns whether to verify the ACME provider HTTPS certificate and chain
- * @param r {NginxHTTPRequest}
+ * @param r {NginxHTTPRequest | NginxPeriodicSession}
  * @returns boolean
  */
-export function acmeVerifyProviderHTTPS(r: NginxHTTPRequest): boolean {
+export function acmeVerifyProviderHTTPS(
+  r: NginxHTTPRequest | NginxPeriodicSession
+): boolean {
   return (
     ['true', 'yes', '1'].indexOf(
       getVariable(r, 'njs_acme_verify_provider_https', 'true')
