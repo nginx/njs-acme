@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
-ARG NGINX_VERSION=1.24.0
+ARG NGINX_VERSION=1.25.3
+ARG NJS_VERSION=0.8.2
 
-FROM node:18 AS builder
+FROM node:20-bullseye AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/app/.npm \
@@ -16,7 +17,7 @@ COPY ./examples/nginx.conf /etc/nginx/nginx.conf
 RUN mkdir /etc/nginx/njs-acme
 RUN chown nginx: /etc/nginx/njs-acme
 
-# install the latest njs > 0.8.0 (not yet bundled with nginx-1.25.1)
+# install the latest njs >= 0.8.1 (not yet bundled with nginx-1.25.2)
 RUN --mount=type=cache,target=/var/cache/apt <<EOF
     set -eux
     export DEBIAN_FRONTEND=noninteractive
@@ -33,7 +34,7 @@ RUN --mount=type=cache,target=/var/cache/apt <<EOF
     | tee /etc/apt/sources.list.d/nginx.list
     apt update -qq
     apt install -qq  --yes --no-install-recommends --no-install-suggests \
-        nginx-module-njs
+        nginx-module-njs=${NGINX_VERSION}+${NJS_VERSION}-${PKG_RELEASE}
     apt remove --purge --auto-remove --yes
     rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/nginx.list
 EOF

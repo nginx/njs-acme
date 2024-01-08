@@ -1,5 +1,5 @@
-ARG NGINX_VERSION=1.25.1
-ARG NJS_VERSION=0.8.0
+ARG NGINX_VERSION=1.25.2
+ARG NJS_VERSION=0.8.1
 FROM nginx:${NGINX_VERSION}
 ARG NGINX_VERSION
 ARG NJS_VERSION
@@ -14,9 +14,11 @@ RUN --mount=type=cache,target=/var/cache/apt <<EOF
     apt-get remove --purge --auto-remove --yes
 EOF
 
-# As of 07/13/2023 NJS v0.8.0 is not included into nginx docker image.
-# this a temprary to install it
-# following installation steps from http://nginx.org/en/linux_packages.html#Debian
+RUN echo nginx-module-njs=${NGINX_VERSION}+${NJS_VERSION}-${PKG_RELEASE}
+
+# As of 09/28/2023 NJS v0.8.1 is not included into nginx docker image.
+# this a temprary patch to install it following installation steps from
+# http://nginx.org/en/linux_packages.html#Debian
 RUN --mount=type=cache,target=/var/cache/apt <<EOF
     set -eux
     export DEBIAN_FRONTEND=noninteractive
