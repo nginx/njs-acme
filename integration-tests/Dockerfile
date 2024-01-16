@@ -1,12 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM node:20-bullseye
 
-ARG NGINX_VERSION=1.25.3
-ARG NJS_VERSION=0.8.2
-
 ENV NJS_ACME_DIR=/etc/nginx/njs-acme/
-
-RUN env
 
 # install nginx and njs
 RUN --mount=type=cache,target=/var/cache/apt <<EOF
@@ -25,8 +20,7 @@ RUN --mount=type=cache,target=/var/cache/apt <<EOF
     | tee /etc/apt/sources.list.d/nginx.list
     apt update -qq
     apt install -qq  --yes --no-install-recommends --no-install-suggests \
-        nginx=${NGINX_VERSION}-1~bullseye \
-        nginx-module-njs=${NGINX_VERSION}+${NJS_VERSION}-1~bullseye
+        nginx nginx-module-njs
     apt remove --purge --auto-remove --yes
     rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/nginx.list
 EOF

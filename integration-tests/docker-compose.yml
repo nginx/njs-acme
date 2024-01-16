@@ -1,3 +1,4 @@
+name: njs_acme_integration
 services:
   pebble:
     # image: letsencrypt/pebble:latest
@@ -38,7 +39,7 @@ services:
       - USE_NGINX_BIN_PATH=/usr/sbin/nginx
       - NGINX_HOSTNAME=proxy.nginx.com
     ports:
-      - 8000:8000
-      - 4443:4443
+      - 8000
+      - 4443
 volumes:
   certs:

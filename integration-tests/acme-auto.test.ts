@@ -32,7 +32,7 @@ describe('Integration:AutoMode', async function () {
       certInfo.certificate.domains.commonName.includes('Pebble Intermediate CA')
     )
     assert.equal(certInfo.certificate.domains.altNames.length, 1)
-    assert.equal(certInfo.certificate.domains.altNames[0][0], this.nginxHost)
+    assert.equal(certInfo.certificate.domains.altNames[0], this.nginxHost)
 
     const httpsClient = this.client.extend({
       prefixUrl: `https://${this.nginxHost}:${this.nginx.ports[1]}`,

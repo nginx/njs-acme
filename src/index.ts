@@ -30,17 +30,56 @@ const RENEWAL_THRESHOLD_DAYS = 30
 
 const log = new Logger()
 
+async function clientAutoMode(r: NginxPeriodicSession): Promise<boolean> {
+  const result = await clientAutoModeInternal(r)
+  if (!result.success) {
+    log.error(`clientAutoModeInternal returned an error: ${JSON.stringify(result.info)}`)
+  }
+  return result.success
+}
+
+type clientAutoModeReturnType = {
+  success: boolean
+  info: Record<string, unknown>
+}
+
 /**
- *  Demonstrates an automated workflow to issue a new certificate for `r.variables.server_name`
+ *  Method to use if you want to be able to trigger a certificate refresh from an HTTP request.
  *
- * @param {NginxHTTPRequest} r Incoming request
+ *
+ * @param {NginxPeriodicSession | NginxHTTPRequest} r Incoming session or request
  * @returns void
  */
-async function clientAutoMode(r: NginxPeriodicSession): Promise<boolean> {
+async function clientAutoModeWeb(r: NginxHTTPRequest): Promise<void> {
+  try {
+    const result = await clientAutoModeInternal(r)
+    if (!result.success) {
+      log.error(`clientAutoModeInternal returned an error: ${JSON.stringify(result.info)}`)
+    }
+    return r.return(result.success ? 200 : 500, JSON.stringify(result.info))
+  } catch (e) {
+    log.error('ERROR: ' + JSON.stringify(e))
+    return r.return(500, JSON.stringify({ error: e }))
+  }
+}
+
+/**
+ *  An automated workflow to issue a new certificate for `njs_acme_server_names`
+ *
+ * @param {NginxPeriodicSession | NginxHTTPRequest} r Incoming session or request
+ * @returns ClientAutoModeReturnType
+ */
+async function clientAutoModeInternal(
+  r: NginxPeriodicSession | NginxHTTPRequest
+): Promise<clientAutoModeReturnType> {
   const log = new Logger('auto')
   const prefix = acmeDir(r)
   const commonName = acmeCommonName(r)
   const altNames = acmeAltNames(r)
+  const retVal: clientAutoModeReturnType = {
+    success: false,
+    info: {},
+  }
 
   const pkeyPath = joinPaths(prefix, commonName + KEY_SUFFIX)
   const csrPath = joinPaths(prefix, commonName + CERTIFICATE_REQ_SUFFIX)
@@ -50,10 +89,8 @@ async function clientAutoMode(r: NginxPeriodicSession): Promise<boolean> {
   try {
     email = getVariable(r, 'njs_acme_account_email')
   } catch {
-    log.error(
-      "Nginx variable '$njs_acme_account_email' or 'NJS_ACME_ACCOUNT_EMAIL' environment variable must be set"
-    )
-    return false
+    retVal.info.error = "Nginx variable '$njs_acme_account_email' or 'NJS_ACME_ACCOUNT_EMAIL' environment variable must be set"
+    return retVal
   }
 
   let certificatePem
@@ -100,8 +137,6 @@ async function clientAutoMode(r: NginxPeriodicSession): Promise<boolean> {
     renewCertificate = true
   }
 
-  log.info(`in clientAutoMode renew=${renewCertificate}`)
-
   if (renewCertificate) {
     const accountKey = await readOrCreateAccountKey(
       acmeAccountPrivateJWKPath(r)
@@ -134,10 +169,8 @@ async function clientAutoMode(r: NginxPeriodicSession): Promise<boolean> {
     try {
       fs.mkdirSync(challengePath, { recursive: true })
     } catch (e) {
-      log.error(
-        `Error creating directory to store challenges. Ensure the ${challengePath} directory is writable by the nginx user.`
-      )
-      return false
+      retVal.info.error = `Error creating directory to store challenges. Ensure the ${challengePath} directory is writable by the nginx user.`
+      return retVal
     }
 
     certificatePem = await client.auto({
@@ -145,7 +178,6 @@ async function clientAutoMode(r: NginxPeriodicSession): Promise<boolean> {
       email,
       termsOfServiceAgreed: true,
       challengeCreateFn: async (authz, challenge, keyAuthorization) => {
-        log.info('Challenge Create', { authz, challenge, keyAuthorization })
         log.info(
           `Writing challenge file so nginx can serve it via .well-known/acme-challenge/${challenge.token}`
         )
@@ -167,7 +199,11 @@ async function clientAutoMode(r: NginxPeriodicSession): Promise<boolean> {
     log.info(`Wrote certificate to ${certPath}`)
   }
 
-  return true
+  retVal.success = true
+  retVal.info.certificate = certInfo
+  retVal.info.renewedCertificate = renewCertificate.toString()
+
+  return retVal
 }
 
 /**
@@ -382,6 +418,7 @@ export default {
   acmeNewAccount,
   challengeResponse,
   clientNewAccount,
+  clientAutoModeWeb,
   clientAutoMode,
   createCsrHandler,
   LogLevel,
