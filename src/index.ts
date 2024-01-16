@@ -13,7 +13,6 @@ import {
   generateKey,
   getVariable,
   joinPaths,
-  NginxPeriodicSession,
   readCertificateInfo,
   readOrCreateAccountKey,
   toPEM,
@@ -49,10 +48,10 @@ type clientAutoModeReturnType = {
  *  Method to use if you want to be able to trigger a certificate refresh from an HTTP request.
  *
  *
- * @param {NginxPeriodicSession | NginxHTTPRequest} r Incoming session or request
+ * @param {NginxHTTPRequest} r Incoming session or request
  * @returns void
  */
-async function clientAutoModeWeb(r: NginxHTTPRequest): Promise<void> {
+async function clientAutoModeHTTP(r: NginxHTTPRequest): Promise<void> {
   try {
     const result = await clientAutoModeInternal(r)
     if (!result.success) {
@@ -184,7 +183,7 @@ async function clientAutoModeInternal(
       csr: Buffer.from(csr.pkcs10Ber),
       email,
       termsOfServiceAgreed: true,
-      challengeCreateFn: async (authz, challenge, keyAuthorization) => {
+      challengeCreateFn: async (_, challenge, keyAuthorization) => {
         log.info(
           `Writing challenge file so nginx can serve it via .well-known/acme-challenge/${challenge.token}`
         )
@@ -425,7 +424,7 @@ export default {
   acmeNewAccount,
   challengeResponse,
   clientNewAccount,
-  clientAutoModeWeb,
+  clientAutoModeHTTP,
   clientAutoMode,
   createCsrHandler,
   LogLevel,

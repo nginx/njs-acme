@@ -8,28 +8,6 @@ import { Logger } from './logger'
 
 const log = new Logger('utils')
 
-/**
- * TODO DELETE THIS ONCE njs-0.8.1 is released (0.8.1 defines this interface)
- * NginxPeriodicSession object is available as the first argument in the js_periodic handler.
- * @since 0.8.1
- */
-export interface NginxPeriodicSession {
-  /**
-   * nginx variables as Buffers.
-   *
-   * @see variables
-   */
-  readonly rawVariables: NginxRawVariables
-  /**
-   * nginx variables as strings.
-   *
-   * **Warning:** Bytes invalid in UTF-8 encoding may be converted into the replacement character.
-   *
-   * @see rawVariables
-   */
-  readonly variables: NginxVariables
-}
-
 // workaround for PKI.JS to work
 globalThis.unescape = querystring.unescape
 

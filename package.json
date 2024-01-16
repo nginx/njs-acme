@@ -63,7 +63,7 @@
     "mocha": "^10.2.0",
     "mocha-suite-hooks": "^0.1.0",
     "nginx-testing": "^0.4.0",
-    "njs-types": "^0.8.0",
+    "njs-types": "^0.8.2",
     "npm-run-all": "^4.1.5",
     "power-assert": "^1.6.1",
     "prettier": "^2.8.8",
