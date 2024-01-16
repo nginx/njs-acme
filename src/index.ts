@@ -33,7 +33,9 @@ const log = new Logger()
 async function clientAutoMode(r: NginxPeriodicSession): Promise<boolean> {
   const result = await clientAutoModeInternal(r)
   if (!result.success) {
-    log.error(`clientAutoModeInternal returned an error: ${JSON.stringify(result.info)}`)
+    log.error(
+      `clientAutoModeInternal returned an error: ${JSON.stringify(result.info)}`
+    )
   }
   return result.success
 }
@@ -54,7 +56,11 @@ async function clientAutoModeWeb(r: NginxHTTPRequest): Promise<void> {
   try {
     const result = await clientAutoModeInternal(r)
     if (!result.success) {
-      log.error(`clientAutoModeInternal returned an error: ${JSON.stringify(result.info)}`)
+      log.error(
+        `clientAutoModeInternal returned an error: ${JSON.stringify(
+          result.info
+        )}`
+      )
     }
     return r.return(result.success ? 200 : 500, JSON.stringify(result.info))
   } catch (e) {
@@ -89,7 +95,8 @@ async function clientAutoModeInternal(
   try {
     email = getVariable(r, 'njs_acme_account_email')
   } catch {
-    retVal.info.error = "Nginx variable '$njs_acme_account_email' or 'NJS_ACME_ACCOUNT_EMAIL' environment variable must be set"
+    retVal.info.error =
+      "Nginx variable '$njs_acme_account_email' or 'NJS_ACME_ACCOUNT_EMAIL' environment variable must be set"
     return retVal
   }
 

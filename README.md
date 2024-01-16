@@ -117,9 +117,9 @@ For example, `NJS_ACME_SERVER_NAMES` (env var) is the same as `$njs_acme_server_
 
 There are a few pieces that are required to be present in your `nginx.conf` file. The file at [`examples/nginx.conf`](./examples/nginx.conf) shows them all.
 
-The examples here use `js_var` for configuration variables, but keep in mind you can use the equivalent environment variables instead if that works better in your environment.
+NOTE: The examples here use `js_var` for configuration variables, but keep in mind you can use the equivalent environment variables instead if that works better in your environment. See the Configuration Variables section above for specifics.
 
-### Config Root
+### `nginx.conf` Root
 * Ensures the NJS module is loaded.
    ```nginx
   load_module modules/ngx_http_js_module.so;
@@ -147,7 +147,7 @@ The examples here use `js_var` for configuration variables, but keep in mind you
   ```nginx
   js_shared_dict_zone zone=acme:1m
   ```
-  * NOTE: If you want to use a different `js_shared_dict_zone` name, then you need to define the variable `$njs_acme_shared_dict_zone_name` with the name you would like to use.
+  * NOTE: If you want to use a different `js_shared_dict_zone` name, then you need to define the variable `$njs_acme_shared_dict_zone_name` with the name you would like to use. You can also use the environment variable `NJS_ACME_SHARED_DICT_ZONE_NAME`.
     ```nginx
     js_var $njs_acme_shared_dict_zone_name acme;
     ```
@@ -173,7 +173,7 @@ This may also be defined with the environment variable `NJS_ACME_SERVER_NAMES`.
   ```
 
 ### `location` Blocks
-* Location to handle ACME challenge requests. This must be accessible from the ACME server.
+* Location to handle ACME challenge requests. This must be accessible from the ACME server - in most cases this means accessbile from another host on the Internet if you are using a service like Let's Encrypt.
   ```nginx
   location ~ "^/\.well-known/acme-challenge/[-_A-Za-z0-9]{22,128}$" {
     js_content acme.challengeResponse;
