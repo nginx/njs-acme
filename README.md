@@ -62,6 +62,12 @@ In the case where both are defined, environment variables take precedence. Envir
 
 For example, `NJS_ACME_SERVER_NAMES` (env var) is the same as `$njs_acme_server_names` (js_var).
 
+### Staging by Default
+
+The value of the variable `NJS_ACME_DIRECTORY_URI` (`js_var $njs_acme_directory_uri`) defaults to Let's Encrypt's _Staging_ environment. When you are finished testing with their staging environment, you will need to define/change the value of this to your ACME provider's production environment. In Let's Encrypt's case the production URL is `https://acme-v02.api.letsencrypt.org/directory`.
+
+You will need to remove the staging certificate from your NGINX server's filesystem when changing from staging to production. It is located in `/etc/nginx/njs-acme/` by default (controlled by the variable `NJS_ACME_DIR`).
+
 ### Required Variables
 
    - `NJS_ACME_ACCOUNT_EMAIL` (env)\
