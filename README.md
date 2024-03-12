@@ -205,7 +205,7 @@ request or renew certificates if necessary.
     js_periodic acme.clientAutoMode interval=1m;
   }
   ```
-  NOTE: The `js_periodic` command runs *after* the interval period has elapsed, not at the beginning. If your use case requires immediate certificate provisioning, then use the following `location {}` block to expose the HTTP endpoint `/acme/auto` to kick off the certificate provisioning process.
+  ALTERNATIVE: The `js_periodic` command runs *after* the interval period has elapsed, not at the beginning. If your use case requires immediate certificate provisioning, then use the following `location {}` block **instead** to expose the HTTP endpoint `/acme/auto` to kick off the certificate provisioning process.
   ```nginx
   location = /acme/auto {
     allow 127.0.0.1; # Adjust for your needs
@@ -214,6 +214,8 @@ request or renew certificates if necessary.
     js_content acme.clientAutoModeHTTP;
   }
   ```
+
+  Use one location block or the other.
 
 ## Development
 
