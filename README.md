@@ -240,9 +240,10 @@ Choose to "Reopen in container" and the services specified in the `docker-compos
 #### Docker Compose
 
 If you just want to start the development environment using Docker (no devcontainer) then run:
-    ```
-    make docker-devup
-    ```
+```
+make docker-devup
+```
+
 
 ### Without Docker
 
