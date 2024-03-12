@@ -267,29 +267,29 @@ To follow these steps, you will need to have Node.js version 14.15 or greater in
 
 1. Start a test environment in Docker:
 
-        make docker-devup
+       make docker-devup
 
 2. Optionally you can watch for `nginx` log file in a separate shell:
 
-        docker compose logs -f nginx
+       docker compose logs -f nginx
 
 3. When started initially, nginx will not have certificates at all. If you use the [example config](examples/nginx.conf), you will need to wait one minute for the `js_periodic` directive to invoke `acme.clientAutoMode` to create the certificate.
 
 4. Send an HTTP request to nginx running in Docker:
 
-        curl -vik --resolve proxy.nginx.com:8000:127.0.0.1 http://proxy.nginx.com:8000/
+       curl -vik --resolve proxy.nginx.com:8000:127.0.0.1 http://proxy.nginx.com:8000/
 
 5. Send an HTTPS request to nginx running in Docker to test a new certificate:
 
-        curl -vik --resolve proxy.nginx.com:4443:127.0.0.1 https://proxy.nginx.com:4443
+       curl -vik --resolve proxy.nginx.com:4443:127.0.0.1 https://proxy.nginx.com:4443
 
 6. Test with `openssl`:
 
-        openssl s_client -servername proxy.nginx.com -connect localhost:4443 -showcerts
+       openssl s_client -servername proxy.nginx.com -connect localhost:4443 -showcerts
 
 7. Display content of certificates
 
-        docker compose exec -it nginx ls -la /etc/nginx/njs-acme/
+       docker compose exec -it nginx ls -la /etc/nginx/njs-acme/
 
 The [docker-compose](./docker-compose.yml) file uses volumes to persist artifacts (account keys, certificate, keys). Additionally, [letsencrypt/pebble](https://github.com/letsencrypt/pebble) is used for testing in Docker, so you don't need to open up port 80 for challenge validation.
 
