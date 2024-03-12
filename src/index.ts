@@ -7,24 +7,24 @@ import {
   acmeDirectoryURI,
   acmeServerNames,
   acmeVerifyProviderHTTPS,
-  acmeZoneName,
   areEqualSets,
   createCsr,
-  generateKey,
   getVariable,
   joinPaths,
   readCertificateInfo,
   readOrCreateAccountKey,
+  readCert,
+  readKey,
   toPEM,
+  KEY_SUFFIX,
+  CERTIFICATE_SUFFIX,
+  CERTIFICATE_REQ_SUFFIX,
 } from './utils'
-import { HttpClient } from './api'
 import { AcmeClient } from './client'
 import fs from 'fs'
 import { LogLevel, Logger } from './logger'
 
-const KEY_SUFFIX = '.key'
-const CERTIFICATE_SUFFIX = '.crt'
-const CERTIFICATE_REQ_SUFFIX = '.csr'
+// TODO: make this configurable
 const RENEWAL_THRESHOLD_DAYS = 30
 
 const log = new Logger()
@@ -213,106 +213,12 @@ async function clientAutoModeInternal(
 }
 
 /**
- * Using AcmeClient to create a new account. It creates an account key if it doesn't exist
- * @param {NginxHTTPRequest} r Incoming request
- * @returns void
- */
-async function clientNewAccount(r: NginxHTTPRequest): Promise<void> {
-  const accountKey = await readOrCreateAccountKey(acmeAccountPrivateJWKPath(r))
-  // Create a new ACME account
-  const client = new AcmeClient({
-    directoryUrl: acmeDirectoryURI(r),
-    accountKey: accountKey,
-  })
-  // display more logs
-  client.api.minLevel = LogLevel.Debug
-  // conditionally validate ACME provider cert
-  client.api.setVerify(acmeVerifyProviderHTTPS(r))
-
-  try {
-    const account = await client.createAccount({
-      termsOfServiceAgreed: true,
-      contact: ['mailto:test@example.com'],
-    })
-    return r.return(200, JSON.stringify(account))
-  } catch (e) {
-    const errMsg = `Error creating ACME account. Error=${e}`
-    log.error(errMsg)
-    return r.return(500, errMsg)
-  }
-}
-
-/**
- * Demonstrates how to use generate RSA Keys and use HttpClient
- * @param r
- * @returns
- */
-async function acmeNewAccount(r: NginxHTTPRequest): Promise<void> {
-  // Generate a new RSA key pair for ACME account
-  const keys = (await generateKey()) as Required<CryptoKeyPair>
-
-  // Create a new ACME account
-  const client = new HttpClient(acmeDirectoryURI(r), keys.privateKey)
-
-  client.minLevel = LogLevel.Debug
-  client.setVerify(acmeVerifyProviderHTTPS(r))
-
-  // Get Terms Of Service link from the ACME provider
-  const tos = await client.getMetaField('termsOfService')
-  log.info(`termsOfService: ${tos}`)
-  // obtain a resource URL
-  const resourceUrl: string = await client.getResourceUrl('newAccount')
-  const payload = {
-    termsOfServiceAgreed: true,
-    contact: ['mailto:test@example.com'],
-  }
-  // Send a signed request
-  const sresp = await client.signedRequest(resourceUrl, payload)
-
-  const respO = {
-    headers: sresp.headers,
-    data: await sresp.json(),
-    status: sresp.status,
-  }
-  return r.return(200, JSON.stringify(respO))
-}
-
-/**
- * Create a new certificate Signing Request - Example implementation
- * @param r
- * @returns
- */
-async function createCsrHandler(r: NginxHTTPRequest): Promise<void> {
-  const { pkcs10Ber, keys } = await createCsr({
-    // EXAMPLE VALUES BELOW
-    altNames: ['proxy1.f5.com', 'proxy2.f5.com'],
-    commonName: 'proxy.f5.com',
-    state: 'WA',
-    country: 'US',
-    organizationUnit: 'NGINX',
-  })
-  const privkey = (await crypto.subtle.exportKey(
-    'pkcs8',
-    keys.privateKey
-  )) as ArrayBuffer
-  const pubkey = (await crypto.subtle.exportKey(
-    'spki',
-    keys.publicKey
-  )) as ArrayBuffer
-  const privkeyPem = toPEM(privkey, 'PRIVATE KEY')
-  const pubkeyPem = toPEM(pubkey, 'PUBLIC KEY')
-  const csrPem = toPEM(pkcs10Ber, 'CERTIFICATE REQUEST')
-  const result = `${privkeyPem}\n${pubkeyPem}\n${csrPem}`
-  return r.return(200, result)
-}
-
-/**
  * Retrieves the cert based on the Nginx HTTP request.
  * @param {NginxHTTPRequest} r - The Nginx HTTP request object.
  * @returns {string, string} - The path and cert associated with the server name.
  */
 function js_cert(r: NginxHTTPRequest): string {
-  return read_cert_or_key(r, CERTIFICATE_SUFFIX)
+  return readCert(r)
 }
 
 /**
@@ -321,53 +227,7 @@ function js_cert(r: NginxHTTPRequest): string {
  * @returns {string} - The path and key associated with the server name.
  */
 function js_key(r: NginxHTTPRequest): string {
-  return read_cert_or_key(r, KEY_SUFFIX)
-}
-
-/**
- * Given a request and suffix that indicates whether the caller wants the cert
- * or key, return the requested object from cache if possible, falling back to
- * disk.
- * @param {NginxHTTPRequest} r - The Nginx HTTP request object.
- * @param {string} suffix - The file suffix that indicates whether we want a cert or key
- * @returns
- */
-function read_cert_or_key(
-  r: NginxHTTPRequest,
-  suffix: typeof CERTIFICATE_SUFFIX | typeof KEY_SUFFIX
-) {
-  let data = ''
-  const prefix = acmeDir(r)
-  const commonName = acmeCommonName(r)
-  const zone = acmeZoneName(r)
-  const path = joinPaths(prefix, commonName + suffix)
-  const key = ['acme', path].join(':')
-
-  // if the zone is not defined in nginx.conf, then we will bypass the cache
-  const cache = zone && ngx.shared && ngx.shared[zone]
-
-  if (cache) {
-    data = (cache.get(key) as string) || ''
-    if (data) {
-      return data
-    }
-  }
-  try {
-    data = fs.readFileSync(path, 'utf8')
-  } catch (e) {
-    log.error('error reading from file:', path, `. Error=${e}`)
-    return ''
-  }
-  if (cache && data) {
-    try {
-      cache.set(key, data)
-      log.debug(`wrote to cache: ${key} zone: ${zone}`)
-    } catch (e) {
-      const errMsg = `error writing to shared dict zone: ${zone}. Error=${e}`
-      log.error(errMsg)
-    }
-  }
-  return data
+  return readKey(r)
 }
 
 /**
@@ -421,12 +281,8 @@ async function challengeResponse(r: NginxHTTPRequest): Promise<void> {
 export default {
   js_cert,
   js_key,
-  acmeNewAccount,
   challengeResponse,
-  clientNewAccount,
   clientAutoModeHTTP,
   clientAutoMode,
-  createCsrHandler,
   LogLevel,
-  Logger,
 }

@@ -44,6 +44,10 @@ const ACCOUNT_KEY_ALG_IMPORT: RsaHashedImportParams = {
   hash: 'SHA-256',
 }
 
+export const KEY_SUFFIX = '.key'
+export const CERTIFICATE_SUFFIX = '.crt'
+export const CERTIFICATE_REQ_SUFFIX = '.csr'
+
 /**
  * Generates RSA private and public key pair
  * @returns {CryptoKeyPair} a private and public key pair
@@ -963,4 +967,68 @@ export function isValidHostname(hostname: string): boolean {
       /^[a-z\d]([-a-z\d]{0,61}[a-z\d])?(\.[a-z\d]([-a-z\d]{0,61}[a-z\d])?)*\.?$/i
     )
   )
+}
+
+/**
+ * Return the certificate
+ * @param {NginxHTTPRequest} r - The Nginx HTTP request object.
+ * @returns {string} - The contents of the cert or key
+ */
+export function readCert(r: NginxHTTPRequest): string {
+  return readCertOrKey(r, CERTIFICATE_SUFFIX)
+}
+
+/**
+ * Return the certificate
+ * @param {NginxHTTPRequest} r - The Nginx HTTP request object.
+ * @returns {string} - The contents of the cert or key
+ */
+export function readKey(r: NginxHTTPRequest): string {
+  return readCertOrKey(r, KEY_SUFFIX)
+}
+
+/**
+ * Given a request and suffix that indicates whether the caller wants the cert
+ * or key, return the requested object from cache if possible, falling back to
+ * disk.
+ * @param {NginxHTTPRequest} r - The Nginx HTTP request object.
+ * @param {string} suffix - The file suffix that indicates whether we want a cert or key
+ * @returns {string} - The contents of the cert or key
+ */
+function readCertOrKey(
+  r: NginxHTTPRequest,
+  suffix: typeof CERTIFICATE_SUFFIX | typeof KEY_SUFFIX
+): string {
+  let data = ''
+  const prefix = acmeDir(r)
+  const commonName = acmeCommonName(r)
+  const zone = acmeZoneName(r)
+  const path = joinPaths(prefix, commonName + suffix)
+  const key = ['acme', path].join(':')
+
+  // if the zone is not defined in nginx.conf, then we will bypass the cache
+  const cache = zone && ngx.shared && ngx.shared[zone]
+
+  if (cache) {
+    data = (cache.get(key) as string) || ''
+    if (data) {
+      return data
+    }
+  }
+  try {
+    data = fs.readFileSync(path, 'utf8')
+  } catch (e) {
+    log.error('error reading from file:', path, `. Error=${e}`)
+    return ''
+  }
+  if (cache && data) {
+    try {
+      cache.set(key, data)
+      log.debug(`wrote to cache: ${key} zone: ${zone}`)
+    } catch (e) {
+      const errMsg = `error writing to shared dict zone: ${zone}. Error=${e}`
+      log.error(errMsg)
+    }
+  }
+  return data
 }
