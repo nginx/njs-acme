@@ -15,14 +15,14 @@ NOTE: Some ACME providers have strict rate limits. Please consult with your prov
 ## Installation
 
 There are a few ways of using this repo. You can:
-* build an ACME-enabled docker image to replace your existing NGINX image
+* build an ACME-enabled Docker image to replace your existing NGINX image
 * use Docker to build the `acme.js` file to use with your NGINX installation
 * build `acme.js` using a locally installed Node.js toolkit to use with your NGINX installation
 
 Each option above is detailed in each section below.
 
 ### Creating a Docker Image
-To create an Nginx+NJS+njs-acme docker image, simply run:
+To create an Nginx+NJS+njs-acme Docker image, simply run:
 ```
 % make docker-build
 ...
@@ -34,6 +34,8 @@ To create an Nginx+NJS+njs-acme docker image, simply run:
 This will build an image with a recent version of NGINX, required njs version, and the `acme.js` file installed at `/usr/lib/nginx/njs_modules/`.
 
 The image will be tagged `nginx/nginx-njs-acme`, where you can use it in place of a standard `nginx` image.
+
+When running the container, we advise mounting the `/etc/nginx/njs-acme/` directory in a Docker volume so that the cert/key are retained between deployments of your `nginx` container. The `docker-compose.yml` file in this directory shows an example of doing this using the `certs` volume.
 
 ### Building `acme.js` With Docker
 
@@ -48,7 +50,6 @@ This will build the full image and copy the `acme.js` file to the local `dist/` 
 
 If you have Node.js and NPM installed on your computer, you can run this command to generate `acme.js` directly:
 ```
-npm ci
 make build
 ```
 
@@ -56,7 +57,7 @@ This will generate `dist/acme.js`, where you can then integrate it into your exi
 
 ## Configuration Variables
 
-You can use environment variables _or_ NGINX `js_var` directives to control the behavior of the NJS ACME client.
+You can use environment variables _or_ NGINX `js_var` directives to control the behavior of the `njs-acme`.
 
 In the case where both are defined, environment variables take precedence. Environment variables are in `ALL_CAPS`, whereas the nginx config variable is the same name, just prefixed with a dollar sign and `$lower_case`.
 
@@ -85,39 +86,51 @@ You will need to remove the staging certificate from your NGINX server's filesys
 ### Optional Variables
    - `NJS_ACME_VERIFY_PROVIDER_HTTPS` (env)\
      `$njs_acme_verify_provider_https` (js_var)\
-        Verify the ACME provider certificate when connecting.\
-        value: `false` | `true`\
-        default: `true`
+        Verify the ACME provider certificate when connecting.
+        ```
+        value: false | true
+        default: true
+        ```
 
    - `NJS_ACME_DIRECTORY_URI` (env)\
      `$njs_acme_directory_uri` (js_var)\
-        ACME directory URL.\
-        value: Any valid URL\
-        default: `https://acme-staging-v02.api.letsencrypt.org/directory`
+        ACME directory URL.
+        ```
+        value: {Any valid URL}
+        default: https://acme-staging-v02.api.letsencrypt.org/directory
+        ```
 
    - `NJS_ACME_DIR` (env)\
      `$njs_acme_dir` (js_var)\
-        Path to store ACME-related files such as keys, certificate requests, certificates, etc.\
-        value: Any valid system path writable by the `nginx` user. \
-        default: `/etc/nginx/njs-acme/`
+        Path to store ACME-related files such as keys, certificate requests, certificates, etc.
+        ```
+        value: Any valid system path writable by the `nginx` user.
+        default: /etc/nginx/njs-acme/
+        ```
 
    - `NJS_ACME_CHALLENGE_DIR` (env)\
      `$njs_acme_challenge_dir` (js_var)\
-        Path to store ACME-related challenge responses.\
-        value: Any valid system path writable by the `nginx` user. \
+        Path to store ACME-related challenge responses.
+        ```
+        value: Any valid system path writable by the `nginx` user.
         default: `${NJS_ACME_DIR}/challenge/`
+        ```
 
    - `NJS_ACME_ACCOUNT_PRIVATE_JWK` (env)\
      `$njs_acme_account_private_jwk` (js_var)\
-        Path to fetch/store the account private JWK.\
-        value: Path to the private JWK\
-        default: `${NJS_ACME_DIR}/account_private_key.json`
+        Path to fetch/store the account private JWK.
+        ```
+        value: Path to the private JWK
+        default: ${NJS_ACME_DIR}/account_private_key.json
+        ```
 
    - `NJS_ACME_SHARED_DICT_ZONE_NAME` (env)\
      `$njs_acme_shared_dict_zone_name` (js_var)\
-        [Shared Dictionary Zone](https://nginx.org/en/docs/http/ngx_http_js_module.html#js_shared_dict_zone) name .\
-        value: Zone name used as in `js_shared_dict_zone` directive\
-        default: `acme`
+        [Shared Dictionary Zone](https://nginx.org/en/docs/http/ngx_http_js_module.html#js_shared_dict_zone) name .
+        ```
+        value: Zone name used as in `js_shared_dict_zone` directive
+        default: acme`
+        ```
 
 ## NGINX Configuration
 
@@ -203,27 +216,35 @@ The ACME RESTful client is implemented using [ngx.fetch](http://nginx.org/en/doc
 
 There is a `docker-compose.yml` file in the project root directory that brings up an ACME server, a challenge server, a Node.js container for rebuilding the `acme.js` file when source files change, and an NGINX container. The built `acme.js` file is shared between the Node.js and NGINX containers. The NGINX container will reload when the `acme.js` file changes.
 
-To start up the development environment with docker compose, run the following:
-
-    make docker-devup
+#### VSCode Devcontainer
 
 If you use VSCode or another devcontainer-compatible editor, then run the following:
-
-    code .
+```
+code .
+```
 
 Choose to "Reopen in container" and the services specified in the `docker-compose.yml` file will start. Editing and saving source files will trigger a rebuild of the `acme.js` file, and NGINX will reload its configuration.
+
+#### Docker Compose
+
+If you just want to start the development environment using Docker (no devcontainer) then run:
+    ```
+    make docker-devup
+    ```
 
 ### Without Docker
 
 To follow these steps, you will need to have Node.js version 14.15 or greater installed on your system.
 
 1. Install dependencies:
-
-        npm ci
+    ```
+    npm ci
+    ```
 
 2. Start the watcher:
-
-        npm run watch
+    ```
+    npm run watch
+    ```
 
 3. Edit the source files. When you save a change, the watcher will rebuild `./dist/acme.js` or display errors.
 
@@ -265,7 +286,7 @@ The [docker-compose](./docker-compose.yml) file uses volumes to persist artifact
 
 If the reference implementation does not meet your needs, then you can build your own flows using this project as a library of convenience functions.
 
-Look at `clientAutoMode` in [`src/index.ts`](./src/index.ts) to see how you can use the convenience functions to build a ACME client implementation.
+Look at `clientAutoMode` in [`src/index.ts`](./src/index.ts) to see how you can use the convenience functions to build a ACME client implementation. There are some additional methods in [`src/examples.ts`](./src/examples.ts) showing how to use the ACME account creation APIs or generating Certificate Signing Requests on demand.
 
 ## Project Structure
 
