@@ -198,14 +198,15 @@ This may also be defined with the environment variable `NJS_ACME_SERVER_NAMES`.
     js_content acme.challengeResponse;
   }
   ```
-* Named location to contain the `js_periodic` directive to automatically
-request or renew certificates if necessary.
+* Named location to contain the `js_periodic` directive to automatically request or renew certificates if necessary.
+
+  > NOTE: This runs at the *end* of each interval, so your server will not be ready for a minute. If this is a problem for your use case, see the ALTERNATIVE below.
   ```nginx
   location @acmePeriodicAuto {
     js_periodic acme.clientAutoMode interval=1m;
   }
   ```
-  ALTERNATIVE: The `js_periodic` command runs *after* the interval period has elapsed, not at the beginning. If your use case requires immediate certificate provisioning, then use the following `location {}` block **instead** to expose the HTTP endpoint `/acme/auto` to kick off the certificate provisioning process.
+  ALTERNATIVE: The `js_periodic` command runs *after* the interval period has elapsed, not at the beginning. If your use case requires immediate certificate provisioning, then use the following `location {}` block **instead**. This location exposes the endpoint `/acme/auto`, which triggers the certificate provisioning process when requested.
   ```nginx
   location = /acme/auto {
     allow 127.0.0.1; # Adjust for your needs
