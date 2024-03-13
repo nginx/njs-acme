@@ -20,7 +20,7 @@ help:
 .PHONY:
 build: ## Run npm run build
 	$Q echo "$(M) building in release mode for the current platform"
-	$Q npm run build
+	$Q npm ci && npm run build
 
 
 .PHONY: docker-build

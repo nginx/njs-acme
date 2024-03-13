@@ -3,7 +3,7 @@ FROM node:20-bullseye
 
 ENV NJS_ACME_DIR=/etc/nginx/njs-acme/
 
-# installing nginx and njs so we can use it while running tests
+# install nginx and njs
 RUN --mount=type=cache,target=/var/cache/apt <<EOF
     set -eux
     export DEBIAN_FRONTEND=noninteractive

@@ -20,5 +20,5 @@ echo "Watching for changes..."
 inotifywait -m -e create,modify $JS_FILE |
   while read filename
   do
-    nginx -s reload
+    $1 -s reload
   done

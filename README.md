@@ -6,20 +6,25 @@
 
 # njs-acme
 
-This repository provides a JavaScript library to work with [ACME](https://datatracker.ietf.org/doc/html/rfc8555) providers such as Let's Encrypt for [NJS](https://nginx.org/en/docs/njs/). The source code is compatible with the `ngx_http_js_module` runtime. This allows for the automatic issue of TLS/SSL certificates for NGINX.
+This repository provides a JavaScript library to work with [ACME](https://datatracker.ietf.org/doc/html/rfc8555) providers such as Let's Encrypt for [NJS](https://nginx.org/en/docs/njs/). The source code is compatible with the `ngx_http_js_module` runtime. This allows for the automatic generation and renewal of TLS/SSL certificates for NGINX.
 
-Requires at least `njs-0.8.0`, which is included with NGINX since nginx-1.25.**???-TBD**.
+Requires at least `njs-0.8.2`, which is included with NGINX since `nginx-1.25.3`.
 
 NOTE: Some ACME providers have strict rate limits. Please consult with your provider. For Let's Encrypt refer to their [rate-limits documentation](https://letsencrypt.org/docs/rate-limits/).
 
 ## Installation
 
-There are a few options for using this repo. You can build a docker image to replace your existing NGINX image, use Docker to build the `acme.js` file, or build `acme.js` using a locally installed Node.js toolkit.
+There are a few ways of using this repo. You can:
+* build an ACME-enabled Docker image to replace your existing NGINX image
+* use Docker to build the `acme.js` file to use with your NGINX installation
+* build `acme.js` using a locally installed Node.js toolkit to use with your NGINX installation
+
+Each option above is detailed in each section below.
 
 ### Creating a Docker Image
-To create an Nginx+NJS+njs-acme docker image, simply run:
+To create an Nginx+NJS+njs-acme Docker image, simply run:
 ```
-> make docker-build
+% make docker-build
 ...
  => exporting to image
  => => exporting layers
@@ -30,77 +35,110 @@ This will build an image with a recent version of NGINX, required njs version, a
 
 The image will be tagged `nginx/nginx-njs-acme`, where you can use it in place of a standard `nginx` image.
 
+When running the container, we advise mounting the `/etc/nginx/njs-acme/` directory in a Docker volume so that the cert/key are retained between deployments of your `nginx` container. The `docker-compose.yml` file in this directory shows an example of doing this using the `certs` volume.
+
 ### Building `acme.js` With Docker
 
-If you do not want to have to worry about installing Node.js and other build dependencies, then you can run this command:
+If you want to use your own NGINX installation and do not want to have to worry about installing Node.js and other build dependencies, then you can run this command:
 ```
 make docker-copy
 ```
 
-This will build the full image and copy the `acme.js` file to the local `dist/` directory.
+This will build the full image and copy the `acme.js` file to the local `dist/` directory. You can then include this file in your NGINX deployments.
 
 ### Building `acme.js` Without Docker
 
-If you have node.js and NPM installed on your computer, you can run this command to generate `acme.js` directly:
+If you have Node.js and NPM installed on your computer, you can run this command to generate `acme.js` directly:
 ```
-npm ci
 make build
 ```
 
-This will generate `dist/acme.js`, where you can then integrate it into your existing NGINX/NJS environment.
+This will generate `dist/acme.js`, where you can then integrate it into your existing NGINX / NJS environment.
 
 ## Configuration Variables
 
-You can use environment variables or NGINX configuration variables to control the behavior of the NJS ACME client. In the case where both are defined, environment variables take precedence. Environment variables are in `ALL_CAPS`, whereas the nginx config variable is the same name, just `lower_case`.
+You can use environment variables _or_ NGINX `js_var` directives to control the behavior of the `njs-acme`.
+
+In the case where both are defined, environment variables take precedence. Environment variables are in `ALL_CAPS`, whereas the nginx config variable is the same name, just prefixed with a dollar sign and `$lower_case`.
+
+For example, `NJS_ACME_SERVER_NAMES` (env var) is the same as `$njs_acme_server_names` (js_var).
+
+### Staging by Default
+
+The value of the variable `NJS_ACME_DIRECTORY_URI` (`js_var $njs_acme_directory_uri`) defaults to Let's Encrypt's _Staging_ environment. When you are finished testing with their staging environment, you will need to define/change the value of this to your ACME provider's production environment. In Let's Encrypt's case the production URL is `https://acme-v02.api.letsencrypt.org/directory`.
+
+You will need to remove the staging certificate from your NGINX server's filesystem when changing from staging to production. It is located in `/etc/nginx/njs-acme/` by default (controlled by the variable `NJS_ACME_DIR`).
 
 ### Required Variables
 
-   - `NJS_ACME_ACCOUNT_EMAIL`\
+   - `NJS_ACME_ACCOUNT_EMAIL` (env)\
+     `$njs_acme_account_email` (js_var)\
         Your email address to send to the ACME provider.\
         value: Any valid email address\
         default: none (you must specify this!)
 
-   - `NJS_ACME_SERVER_NAMES`\
+   - `NJS_ACME_SERVER_NAMES` (env)\
+     `$njs_acme_server_names` (js_var)\
         The hostname or list of hostnames to request the certificate for.\
         value: Space-separated list of hostnames, e.g. `www1.mydomain.com www2.mydomain.com`\
         default: none (you must specify this!)
 
 ### Optional Variables
-   - `NJS_ACME_VERIFY_PROVIDER_HTTPS`\
-        Verify the ACME provider certificate when connecting.\
-        value: `false` | `true`\
-        default: `true`
+   - `NJS_ACME_VERIFY_PROVIDER_HTTPS` (env)\
+     `$njs_acme_verify_provider_https` (js_var)\
+        Verify the ACME provider certificate when connecting.
+        ```
+        value: false | true
+        default: true
+        ```
 
-   - `NJS_ACME_DIRECTORY_URI`\
-        ACME directory URL.\
-        value: Any valid URL\
-        default: `https://acme-staging-v02.api.letsencrypt.org/directory`
+   - `NJS_ACME_DIRECTORY_URI` (env)\
+     `$njs_acme_directory_uri` (js_var)\
+        ACME directory URL.
+        ```
+        value: {Any valid URL}
+        default: https://acme-staging-v02.api.letsencrypt.org/directory
+        ```
 
-   - `NJS_ACME_DIR`\
-        Path to store ACME-related files such as keys, certificate requests, certificates, etc.\
-        value: Any valid system path writable by the `nginx` user. \
-        default: `/etc/nginx/njs-acme/`
+   - `NJS_ACME_DIR` (env)\
+     `$njs_acme_dir` (js_var)\
+        Path to store ACME-related files such as keys, certificate requests, certificates, etc.
+        ```
+        value: Any valid system path writable by the `nginx` user.
+        default: /etc/nginx/njs-acme/
+        ```
 
-   - `NJS_ACME_CHALLENGE_DIR`\
-        Path to store ACME-related challenge responses.\
-        value: Any valid system path writable by the `nginx` user. \
+   - `NJS_ACME_CHALLENGE_DIR` (env)\
+     `$njs_acme_challenge_dir` (js_var)\
+        Path to store ACME-related challenge responses.
+        ```
+        value: Any valid system path writable by the `nginx` user.
         default: `${NJS_ACME_DIR}/challenge/`
+        ```
 
-   - `NJS_ACME_ACCOUNT_PRIVATE_JWK`\
-        Path to fetch/store the account private JWK.\
-        value: Path to the private JWK\
-        default: `${NJS_ACME_DIR}/account_private_key.json`
+   - `NJS_ACME_ACCOUNT_PRIVATE_JWK` (env)\
+     `$njs_acme_account_private_jwk` (js_var)\
+        Path to fetch/store the account private JWK.
+        ```
+        value: Path to the private JWK
+        default: ${NJS_ACME_DIR}/account_private_key.json
+        ```
 
-   - `NJS_ACME_SHARED_DICT_ZONE_NAME`\
-        [Shared Dictionary Zone](https://nginx.org/en/docs/http/ngx_http_js_module.html#js_shared_dict_zone) name .\
-        value: Zone name used as in `js_shared_dict_zone` directive\
-        default: `acme`
+   - `NJS_ACME_SHARED_DICT_ZONE_NAME` (env)\
+     `$njs_acme_shared_dict_zone_name` (js_var)\
+        [Shared Dictionary Zone](https://nginx.org/en/docs/http/ngx_http_js_module.html#js_shared_dict_zone) name .
+        ```
+        value: Zone name used as in `js_shared_dict_zone` directive
+        default: acme`
+        ```
 
 ## NGINX Configuration
 
 There are a few pieces that are required to be present in your `nginx.conf` file. The file at [`examples/nginx.conf`](./examples/nginx.conf) shows them all.
 
-### Config Root
+NOTE: The examples here use `js_var` for configuration variables, but keep in mind you can use the equivalent environment variables instead if that works better in your environment. See the Configuration Variables section above for specifics.
+
+### `nginx.conf` Root
 * Ensures the NJS module is loaded.
    ```nginx
   load_module modules/ngx_http_js_module.so;
@@ -111,7 +149,7 @@ There are a few pieces that are required to be present in your `nginx.conf` file
   ```nginx
   js_path "/usr/lib/nginx/njs_modules/";
   ```
-* Ensures the Let's Encrypt root certificate is loaded.
+* Ensures a root certificate bundle is loaded into NJS.
   ```nginx
   js_fetch_trusted_certificate /etc/ssl/certs/ISRG_Root_X1.pem;
   ```
@@ -128,17 +166,21 @@ There are a few pieces that are required to be present in your `nginx.conf` file
   ```nginx
   js_shared_dict_zone zone=acme:1m
   ```
+  * NOTE: If you want to use a different `js_shared_dict_zone` name, then you need to define the variable `$njs_acme_shared_dict_zone_name` with the name you would like to use. You can also use the environment variable `NJS_ACME_SHARED_DICT_ZONE_NAME`.
+    ```nginx
+    js_var $njs_acme_shared_dict_zone_name acme;
+    ```
 
-### `server` Section
-* Set the hostname or hostnames (space-separated) to generate the certificate.
-This may also be defined with the environment variable `NJS_ACME_SERVER_NAMES`.
-  ```nginx
-  js_var $njs_acme_server_names proxy.nginx.com;
-  ```
+### `server` Section(s)
 * Set your email address to use to configure your ACME account. This may also
 be defined with the environment variable `NJS_ACME_ACCOUNT_EMAIL`.
   ```nginx
   js_var $njs_acme_account_email test@example.com;
+  ```
+* Set the hostname or hostnames (space-separated) to generate the certificate.
+This may also be defined with the environment variable `NJS_ACME_SERVER_NAMES`.
+  ```nginx
+  js_var $njs_acme_server_names 'proxy.nginx.com proxy2.nginx.com';
   ```
 * Set and use variables to hold the certificate and key paths using Javascript.
   ```nginx
@@ -148,69 +190,33 @@ be defined with the environment variable `NJS_ACME_ACCOUNT_EMAIL`.
   ssl_certificate data:$dynamic_ssl_cert;
   ssl_certificate_key data:$dynamic_ssl_key;
   ```
-* You may use `js_shared_dict_zone` to improve performance and cache certificates
-and keys in shared memory, then set variable with the zone name.
-  ```nginx
-  js_var $njs_acme_shared_dict_zone_name acme;
-  ```
 
 ### `location` Blocks
-* Location to handle ACME challenge requests.
+* Location to handle ACME challenge requests. This must be accessible from the ACME server - in most cases this means accessbile from another host on the Internet if you are using a service like Let's Encrypt.
   ```nginx
   location ~ "^/\.well-known/acme-challenge/[-_A-Za-z0-9]{22,128}$" {
     js_content acme.challengeResponse;
   }
   ```
+* Named location to contain the `js_periodic` directive to automatically request or renew certificates if necessary.
 
-* Location, that when requested, inspects the stored certificate (if present) and will request a new certificate if necessary. The included `docker-compose.yml` shows how to use a `healthcheck:` configuration for the NGINX service to periodically request this endpoint.  This should usually be restricted to local or Docker network requests to avoid it being abused. NGINX's [ngx_http_access_module](http://nginx.org/en/docs/http/ngx_http_access_module.html) provides functionality to allow or deny requests. You can look for requests to `/acme/auto` in the NGINX access log entries to find the client IP address to allow.
+  > NOTE: This runs at the *end* of each interval, so your server will not be ready for a minute. If this is a problem for your use case, see the ALTERNATIVE below.
+  ```nginx
+  location @acmePeriodicAuto {
+    js_periodic acme.clientAutoMode interval=1m;
+  }
+  ```
+  ALTERNATIVE: The `js_periodic` command runs *after* the interval period has elapsed, not at the beginning. If your use case requires immediate certificate provisioning, then use the following `location {}` block **instead**. This location exposes the endpoint `/acme/auto`, which triggers the certificate provisioning process when requested.
   ```nginx
   location = /acme/auto {
-    js_content acme.clientAutoMode;
-    # Make sure you are not exposing this location to the Internet.
-    # Allow only the IP or IP range of the host making automated /acme/auto requests.
-    # You will probably need to customize the `allow` address(es) below.
-    # allow 192.168.1.0/24;
-    # allow 2001:0db8::/32;
-    # deny all;
+    allow 127.0.0.1; # Adjust for your needs
+    deny all;
+    js_periodic acme.clientAutoMode interval=1m;
+    js_content acme.clientAutoModeHTTP;
   }
   ```
 
-## Automatic Certificate Renewal
-
-NGINX and NJS do not yet have a mechanism for running code on a time interval, which presents a challenge for certificate renewal. One workaround to this is to set something up to periodically request `/acme/auto` from the NGINX server.
-
-If running directly on a host, you can use `cron` to schedule a periodic request. When deploying in Kubernetes you can use a [liveness-check](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-http-request). If you are running in a `docker` context, you can use Docker's `healthcheck:` functionality to do this.
-
-Here is an example using `docker compose`:
-
-```docker
-service:
-  nginx:
-    ...
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://proxy.nginx.com:8000/acme/auto"]
-      interval: 90s
-      timeout: 90s
-      retries: 3
-      start_period: 10s
-```
-
-This configuration will request `/acme/auto` every 90 seconds. If the certificate is nearing expiry, it will be automatically renewed.
-
-## Advanced
-### Serving challenges directly
-  If you do not wish to use `js_content acme.challengeResponse` to respond to challenge requests, then you can serve them directly with NGINX. Just be sure that the `root` directive value in your location block matches the value of `$njs_acme_challenge_dir`.
-
-  ```nginx
-  server {
-    js_var $njs_acme_challenge_dir /etc/nginx/njs-acme/challenge;
-    <...>
-    location ~ "^/\.well-known/acme-challenge/[-_A-Za-z0-9]{22,128}$" {
-      default_type "text/plain";
-      root /etc/nginx/njs-acme/challenge/;
-    }
-
-  ```
+  Use one location block or the other.
 
 ## Development
 
@@ -222,27 +228,36 @@ The ACME RESTful client is implemented using [ngx.fetch](http://nginx.org/en/doc
 
 There is a `docker-compose.yml` file in the project root directory that brings up an ACME server, a challenge server, a Node.js container for rebuilding the `acme.js` file when source files change, and an NGINX container. The built `acme.js` file is shared between the Node.js and NGINX containers. The NGINX container will reload when the `acme.js` file changes.
 
-To start up the development environment with docker compose, run the following:
-
-    make docker-devup
+#### VSCode Devcontainer
 
 If you use VSCode or another devcontainer-compatible editor, then run the following:
-
-    code .
+```
+code .
+```
 
 Choose to "Reopen in container" and the services specified in the `docker-compose.yml` file will start. Editing and saving source files will trigger a rebuild of the `acme.js` file, and NGINX will reload its configuration.
+
+#### Docker Compose
+
+If you just want to start the development environment using Docker (no devcontainer) then run:
+```
+make docker-devup
+```
+
 
 ### Without Docker
 
 To follow these steps, you will need to have Node.js version 14.15 or greater installed on your system.
 
 1. Install dependencies:
-
-        npm ci
+    ```
+    npm ci
+    ```
 
 2. Start the watcher:
-
-        npm run watch
+    ```
+    npm run watch
+    ```
 
 3. Edit the source files. When you save a change, the watcher will rebuild `./dist/acme.js` or display errors.
 
@@ -253,31 +268,29 @@ To follow these steps, you will need to have Node.js version 14.15 or greater in
 
 1. Start a test environment in Docker:
 
-        make docker-devup
+       make docker-devup
 
 2. Optionally you can watch for `nginx` log file in a separate shell:
 
-        docker compose logs -f nginx
+       docker compose logs -f nginx
 
-3. When started initially, nginx would not have certificates at all (`$njs_acme_dir`, e.g. `/etc/nginx/njs-acme/`), so we can issue a new one by sending an HTTP request to a location with the `js_content` handler:
-
-        curl -vik --resolve proxy.nginx.com:8000:127.0.0.1 http://proxy.nginx.com:8000/acme/auto
+3. When started initially, nginx will not have certificates at all. If you use the [example config](examples/nginx.conf), you will need to wait one minute for the `js_periodic` directive to invoke `acme.clientAutoMode` to create the certificate.
 
 4. Send an HTTP request to nginx running in Docker:
 
-        curl -vik --resolve proxy.nginx.com:8000:127.0.0.1 http://proxy.nginx.com:8000/
+       curl -vik --resolve proxy.nginx.com:8000:127.0.0.1 http://proxy.nginx.com:8000/
 
 5. Send an HTTPS request to nginx running in Docker to test a new certificate:
 
-        curl -vik --resolve proxy.nginx.com:4443:127.0.0.1 https://proxy.nginx.com:4443
+       curl -vik --resolve proxy.nginx.com:4443:127.0.0.1 https://proxy.nginx.com:4443
 
 6. Test with `openssl`:
 
-        openssl s_client -servername proxy.nginx.com -connect localhost:4443 -showcerts
+       openssl s_client -servername proxy.nginx.com -connect localhost:4443 -showcerts
 
 7. Display content of certificates
 
-        docker compose exec -it nginx ls -la /etc/nginx/njs-acme/
+       docker compose exec -it nginx ls -la /etc/nginx/njs-acme/
 
 The [docker-compose](./docker-compose.yml) file uses volumes to persist artifacts (account keys, certificate, keys). Additionally, [letsencrypt/pebble](https://github.com/letsencrypt/pebble) is used for testing in Docker, so you don't need to open up port 80 for challenge validation.
 
@@ -286,7 +299,7 @@ The [docker-compose](./docker-compose.yml) file uses volumes to persist artifact
 
 If the reference implementation does not meet your needs, then you can build your own flows using this project as a library of convenience functions.
 
-Look at `clientAutoMode` in [`src/index.ts`](./src/index.ts) to see how you can use the convenience functions to build a ACME client implementation.
+Look at `clientAutoMode` in [`src/index.ts`](./src/index.ts) to see how you can use the convenience functions to build a ACME client implementation. There are some additional methods in [`src/examples.ts`](./src/examples.ts) showing how to use the ACME account creation APIs or generating Certificate Signing Requests on demand.
 
 ## Project Structure
 
