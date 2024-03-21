@@ -19,6 +19,7 @@ import {
   KEY_SUFFIX,
   CERTIFICATE_SUFFIX,
   CERTIFICATE_REQ_SUFFIX,
+  purgeCachedCertKey,
 } from './utils'
 import { AcmeClient } from './client'
 import fs from 'fs'
@@ -203,6 +204,9 @@ async function clientAutoModeInternal(
     certInfo = await readCertificateInfo(certificatePem)
     fs.writeFileSync(certPath, certificatePem)
     log.info(`Wrote certificate to ${certPath}`)
+
+    // Purge the cert/key in the shared dict zone if applicable
+    purgeCachedCertKey(r)
   }
 
   retVal.success = true
