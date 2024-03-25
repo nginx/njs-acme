@@ -88,6 +88,7 @@ async function clientAutoModeInternal(
   }
 
   const pkeyPath = joinPaths(prefix, commonName + KEY_SUFFIX)
+  const tempPkeyPath = pkeyPath + '.tmp'
   const csrPath = joinPaths(prefix, commonName + CERTIFICATE_REQ_SUFFIX)
   const certPath = joinPaths(prefix, commonName + CERTIFICATE_SUFFIX)
 
@@ -168,8 +169,8 @@ async function clientAutoModeInternal(
       csr.keys.privateKey
     )) as ArrayBuffer
     pkeyPem = toPEM(privKey, 'PRIVATE KEY')
-    fs.writeFileSync(pkeyPath, pkeyPem)
-    log.info(`Wrote private key to ${pkeyPath}`)
+    fs.writeFileSync(tempPkeyPath, pkeyPem)
+    log.info(`Wrote private key to ${tempPkeyPath}`)
 
     const challengePath = acmeChallengeDir(r)
 
@@ -204,6 +205,8 @@ async function clientAutoModeInternal(
     certInfo = await readCertificateInfo(certificatePem)
     fs.writeFileSync(certPath, certificatePem)
     log.info(`Wrote certificate to ${certPath}`)
+    fs.renameSync(tempPkeyPath, pkeyPath)
+    log.info(`Renamed ${tempPkeyPath} to ${pkeyPath}`)
 
     // Purge the cert/key in the shared dict zone if applicable
     purgeCachedCertKey(r)
