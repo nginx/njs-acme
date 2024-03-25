@@ -991,37 +991,40 @@ export function readKey(r: NginxHTTPRequest): string {
  * Given a request and suffix that indicates whether the caller wants the cert
  * or key, return the requested object from cache if possible, falling back to
  * disk.
- * @param {NginxHTTPRequest} r - The Nginx HTTP request object.
- * @param {string} suffix - The file suffix that indicates whether we want a cert or key
- * @returns {string} - The contents of the cert or key
+ * @param {NginxHTTPRequest} r The Nginx HTTP request object.
+ * @param {string} suffix The file suffix that indicates whether we want a cert or key
+ * @returns {string} The contents of the cert or key
  */
 function readCertOrKey(
   r: NginxHTTPRequest,
   suffix: typeof CERTIFICATE_SUFFIX | typeof KEY_SUFFIX
 ): string {
   let data = ''
-  const prefix = acmeDir(r)
-  const commonName = acmeCommonName(r)
-  const zone = acmeZoneName(r)
-  const path = joinPaths(prefix, commonName + suffix)
-  const key = ['acme', path].join(':')
+  const base = certOrKeyBase(r)
+  const path = base + suffix
+  const key = cacheKey(path)
 
-  // if the zone is not defined in nginx.conf, then we will bypass the cache
-  const cache = zone && ngx.shared && ngx.shared[zone]
+  const cache = ngxSharedDict(r)
 
+  // ensure the shared dict zone is configured before checking cache
   if (cache) {
     data = (cache.get(key) as string) || ''
     if (data) {
+      // Return cached value
       return data
     }
   }
+
+  // filesystem fallback
   try {
     data = fs.readFileSync(path, 'utf8')
   } catch (e) {
     log.error('error reading from file:', path, `. Error=${e}`)
     return ''
   }
+  // try caching value read from disk in the shared dict zone, if configured
   if (cache && data) {
+    const zone = acmeZoneName(r)
     try {
       cache.set(key, data)
       log.debug(`wrote to cache: ${key} zone: ${zone}`)
@@ -1031,4 +1034,59 @@ function readCertOrKey(
     }
   }
   return data
+}
+
+/**
+ * Returns the NGINX shared dict zone if configured.
+ * @param r - The request or periodic session
+ * @returns Shared dict zone or `null`
+ */
+function ngxSharedDict(
+  r: NginxHTTPRequest | NginxPeriodicSession
+): NgxSharedDict | null {
+  const zone = acmeZoneName(r)
+  if (zone && ngx.shared) {
+    const sharedZone = ngx.shared[zone]
+    if (sharedZone) {
+      return sharedZone
+    }
+  }
+  return null
+}
+
+/**
+ * Removes cached cert and key from the shared dict zone, if applicable.
+ * @param r - The request or periodic session
+ */
+export function purgeCachedCertKey(
+  r: NginxHTTPRequest | NginxPeriodicSession
+): void {
+  const objPrefix = certOrKeyBase(r)
+  const cache = ngxSharedDict(r)
+
+  if (cache) {
+    cache.delete(cacheKey(objPrefix + CERTIFICATE_SUFFIX))
+    cache.delete(cacheKey(objPrefix + KEY_SUFFIX))
+  }
+}
+
+/**
+ * Prepend our namespace to a given cache key
+ * @param key Path to the cert or key
+ * @returns Shared dict cache ke
+ */
+function cacheKey(key: string) {
+  return 'acme:' + key
+}
+
+/**
+ * Returns the base path to store a cert or key
+ * @param path Path to the cert or key
+ * @returns Path string
+ */
+function certOrKeyBase(r: NginxHTTPRequest | NginxPeriodicSession): string {
+  const prefix = acmeDir(r)
+  const commonName = acmeCommonName(r)
+  const path = joinPaths(prefix, commonName)
+  return path
 }
