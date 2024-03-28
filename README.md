@@ -15,11 +15,21 @@ NOTE: Some ACME providers have strict rate limits. Please consult with your prov
 ## Installation
 
 There are a few ways of using this repo. You can:
+* download `acme.js` from the latest [Release](https://github.com/nginx/njs-acme/releases)
 * build an ACME-enabled Docker image to replace your existing NGINX image
 * use Docker to build the `acme.js` file to use with your NGINX installation
 * build `acme.js` using a locally installed Node.js toolkit to use with your NGINX installation
 
 Each option above is detailed in each section below.
+
+### Downloading the Latest Release
+You can download the latest released `acme.js` file from the [Releases](https://github.com/nginx/njs-acme/releases) page. Typically you would place this in the path `/usr/lib/nginx/njs_modules/acme.js` in your NGINX server. See the example [nginx.conf](examples/nginx.conf) to see how to integrate it into your NGINX configuration.
+
+To integrate the downloaded `acme.js` file into a Docker image, you can add the following to your Dockerfile:
+```
+RUN mkdir -p /usr/lib/nginx/njs_modules/
+RUN curl -L -o /usr/lib/nginx/njs_modules/acme.js https://github.com/nginx/njs-acme/releases/download/v1.0.0/acme.js
+```
 
 ### Creating a Docker Image
 To create an Nginx+NJS+njs-acme Docker image, simply run:
