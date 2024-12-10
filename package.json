@@ -60,7 +60,7 @@
     "eslint-config-prettier": "^8.8.0",
     "eslint-plugin-prettier": "^4.2.1",
     "got": "^11.8.6",
-    "mocha": "^10.2.0",
+    "mocha": "^10.8.2",
     "mocha-suite-hooks": "^0.1.0",
     "nginx-testing": "^0.4.0",
     "njs-types": "^0.8.2",
