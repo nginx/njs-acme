@@ -4,6 +4,9 @@
 
 ![NJS + ACME = Certs!](images/banner.png)
 
+> [!WARNING]
+> This repository is not active. We've redirected our effort at an officially supported, native solution for ACME: [`ngx_http_acme_module`](https://nginx.org/en/docs/http/ngx_http_acme_module.html).
+
 # njs-acme
 
 This repository provides a JavaScript library to work with [ACME](https://datatracker.ietf.org/doc/html/rfc8555) providers such as Let's Encrypt for [NJS](https://nginx.org/en/docs/njs/). The source code is compatible with the `ngx_http_js_module` runtime. This allows for the automatic generation and renewal of TLS/SSL certificates for NGINX.
