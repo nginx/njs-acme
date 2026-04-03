@@ -1,10 +1,10 @@
 [![CI](https://github.com/nginx/njs-acme/actions/workflows/ci.yaml/badge.svg)](https://github.com/nginx/njs-acme/actions/workflows/ci.yaml)
 [![Project Status: Unsupported – The project has reached a stable, usable state, but the author(s) have ceased all work on it.](https://www.repostatus.org/badges/latest/unsupported.svg)](https://www.repostatus.org/#unsupported)
 
-![NJS + ACME = Certs!](images/banner.png)
-
 > [!WARNING]
 > This repository is not active. We've redirected our effort at an officially supported, native solution for ACME: [`ngx_http_acme_module`](https://nginx.org/en/docs/http/ngx_http_acme_module.html).
+
+![NJS + ACME = Certs!](images/banner.png)
 
 # njs-acme
 
