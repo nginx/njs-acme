@@ -1,6 +1,17 @@
 import assert from 'assert'
 import { describe, it } from 'mocha'
-import { acmeServerNames, isValidHostname } from '../src/utils'
+import * as pkijs from 'pkijs'
+import {
+  acmeServerNames,
+  createCsr,
+  generateKey,
+  isValidHostname,
+} from '../src/utils'
+
+/** ecdsa-with-SHA256 */
+const ECDSA_WITH_SHA256 = '1.2.840.10045.4.3.2'
+/** sha256WithRSAEncryption */
+const SHA256_WITH_RSA = '1.2.840.113549.1.1.11'
 
 describe('utils', () => {
   describe('isValidHostname', () => {
@@ -72,5 +83,66 @@ describe('utils', () => {
         assert.throws(() => acmeServerNames(r))
       }
     })
+  })
+})
+
+describe('createCsr', function () {
+  /* RSA key generation is slow enough to trip the default 2s timeout */
+  this.timeout(30000)
+
+  const csrParams = {
+    commonName: 'proxy.example.com',
+    altNames: ['proxy2.example.com'],
+  }
+
+  const parseCsr = (pkcs10Ber: ArrayBuffer) =>
+    pkijs.CertificationRequest.fromBER(pkcs10Ber)
+
+  it('generates an RSA key pair by default', async () => {
+    const { pkcs10Ber, keys } = await createCsr(csrParams)
+    const pkcs10 = parseCsr(pkcs10Ber)
+
+    assert.strictEqual(keys.privateKey.algorithm.name, 'RSASSA-PKCS1-v1_5')
+    assert.strictEqual(pkcs10.signatureAlgorithm.algorithmId, SHA256_WITH_RSA)
+    assert(await pkcs10.verify())
+  })
+
+  it('uses the key pair it is given', async () => {
+    const keys = (await generateKey()) as Required<CryptoKeyPair>
+    const { pkcs10Ber, keys: returnedKeys } = await createCsr({
+      ...csrParams,
+      keys,
+    })
+
+    assert.strictEqual(returnedKeys.privateKey, keys.privateKey)
+    assert.strictEqual(returnedKeys.publicKey, keys.publicKey)
+
+    /* the CSR carries the public key it was handed, not a freshly minted one */
+    const spki = (await crypto.subtle.exportKey(
+      'spki',
+      keys.publicKey
+    )) as ArrayBuffer
+    const csrSpki = parseCsr(pkcs10Ber).subjectPublicKeyInfo.toSchema().toBER()
+    assert.deepStrictEqual(Buffer.from(csrSpki), Buffer.from(spki))
+    assert(await parseCsr(pkcs10Ber).verify())
+  })
+
+  it('generates a key of the requested size', async () => {
+    const { keys } = await createCsr({ ...csrParams, keySize: 1024 })
+    const alg = keys.privateKey.algorithm as RsaHashedKeyGenParams
+
+    assert.strictEqual(alg.modulusLength, 1024)
+  })
+
+  it('signs with ECDSA when generating an EC key', async () => {
+    const { pkcs10Ber, keys } = await createCsr({
+      ...csrParams,
+      keyAlgorithm: { name: 'ECDSA', namedCurve: 'P-256' },
+    })
+    const pkcs10 = parseCsr(pkcs10Ber)
+
+    assert.strictEqual(keys.privateKey.algorithm.name, 'ECDSA')
+    assert.strictEqual(pkcs10.signatureAlgorithm.algorithmId, ECDSA_WITH_SHA256)
+    assert(await pkcs10.verify())
   })
 })

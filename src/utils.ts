@@ -49,14 +49,20 @@ export const CERTIFICATE_SUFFIX = '.crt'
 export const CERTIFICATE_REQ_SUFFIX = '.csr'
 
 /**
- * Generates RSA private and public key pair
+ * Parameters accepted when generating a new key pair
+ */
+export type KeyGenerationParams = RsaHashedKeyGenParams | EcKeyGenParams
+
+/**
+ * Generates a private and public key pair
+ * @param {KeyGenerationParams} [alg] - Key generation parameters,
+ * default: RSASSA-PKCS1-v1_5 with a 2048 bit modulus
  * @returns {CryptoKeyPair} a private and public key pair
  */
-export async function generateKey(): Promise<CryptoKey | CryptoKeyPair> {
-  const keys = await crypto.subtle.generateKey(ACCOUNT_KEY_ALG_GENERATE, true, [
-    'sign',
-    'verify',
-  ])
+export async function generateKey(
+  alg: KeyGenerationParams = ACCOUNT_KEY_ALG_GENERATE
+): Promise<CryptoKey | CryptoKeyPair> {
+  const keys = await crypto.subtle.generateKey(alg, true, ['sign', 'verify'])
   return keys
 }
 
@@ -304,9 +310,33 @@ function getSignatureParameters(
 }
 
 /**
+ * Returns the key generation parameters for a CSR: an explicit `keyAlgorithm`
+ * wins, otherwise the default parameters with `keySize` as modulus length.
+ *
+ * @param {object} params - CSR parameters
+ * @returns {KeyGenerationParams} parameters to pass to `generateKey()`
+ */
+function keyGenerationParams(params: {
+  keyAlgorithm?: KeyGenerationParams
+  keySize?: number
+}): KeyGenerationParams {
+  if (params.keyAlgorithm) {
+    return params.keyAlgorithm
+  }
+  if (params.keySize) {
+    return { ...ACCOUNT_KEY_ALG_GENERATE, modulusLength: params.keySize }
+  }
+  return ACCOUNT_KEY_ALG_GENERATE
+}
+
+/**
  * Create a Certificate Signing Request
  *
  * @param {object} params - CSR parameters
+ * @param {Required<CryptoKeyPair>} [params.keys] - Key pair to use, a new one is
+ * generated when omitted
+ * @param {KeyGenerationParams} [params.keyAlgorithm] - Parameters used to generate the
+ * key pair, default: RSASSA-PKCS1-v1_5 with a 2048 bit modulus
  * @param {number} [params.keySize] - Size of the newly created private key, default: `2048`
  * @param {string} [params.commonName] - Common name
  * @param {string[]} [params.altNames] - Alternative names, default: `[]`
@@ -320,6 +350,8 @@ function getSignatureParameters(
  * the PKCS10 BER representation and generated keys
  */
 export async function createCsr(params: {
+  keys?: Required<CryptoKeyPair>
+  keyAlgorithm?: KeyGenerationParams
   keySize?: number
   commonName: string
   altNames: string[]
@@ -330,9 +362,11 @@ export async function createCsr(params: {
   organizationUnit?: string
   emailAddress?: string
 }): Promise<{ pkcs10Ber: ArrayBuffer; keys: Required<CryptoKeyPair> }> {
-  // TODO:  allow to provide keys in addition to always generating one
   const { privateKey, publicKey } =
-    (await generateKey()) as Required<CryptoKeyPair>
+    params.keys ||
+    ((await generateKey(
+      keyGenerationParams(params)
+    )) as Required<CryptoKeyPair>)
 
   const pkcs10 = new pkijs.CertificationRequest()
   pkcs10.version = 0
@@ -477,21 +511,61 @@ async function getSubjectKeyIdentifier(
   return new asn1js.OctetString({ valueHex: subjectKeyIdentifier })
 }
 
+/**
+ * Returns the algorithm to hand to `crypto.subtle.sign()` for a given key.
+ *
+ * The parameters are rebuilt from the key rather than taken from pkijs, which
+ * returns the hash in the WebCrypto `{ name: 'SHA-256' }` form while njs only
+ * accepts a plain string. Anything other than the cases below is rejected by
+ * `getSignatureParameters()` before this is reached.
+ *
+ * @param privateKey {CryptoKey} The private key used for the signature
+ * @param hashAlgorithm {HashVariants} The hash algorithm used for the signature
+ * @param parameters {pkijs.CryptoEngineAlgorithmParams} Signature parameters from pkijs
+ * @returns {SignOrVerifyAlgorithm} An algorithm accepted by `crypto.subtle.sign()`
+ */
+function getSignAlgorithm(
+  privateKey: CryptoKey,
+  hashAlgorithm: HashVariants,
+  parameters: pkijs.CryptoEngineAlgorithmParams
+): SignOrVerifyAlgorithm {
+  switch (privateKey.algorithm.name.toUpperCase()) {
+    case 'ECDSA':
+      return { name: 'ECDSA', hash: hashAlgorithm }
+    case 'RSA-PSS':
+      return {
+        name: 'RSA-PSS',
+        saltLength: (parameters.algorithm as RsaPssParams).saltLength,
+      }
+    default:
+      return { name: 'RSASSA-PKCS1-v1_5' }
+  }
+}
+
 async function signCsr(
   pkcs10: pkijs.CertificationRequest,
   privateKey: CryptoKey
 ): Promise<void> {
+  const hashAlgorithm: HashVariants = 'SHA-256'
+  const signatureParams = getSignatureParameters(privateKey, hashAlgorithm)
+
   /* Set signatureValue  */
   pkcs10.tbsView = new Uint8Array(encodeTBS(pkcs10).toBER())
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
+  let signature = await crypto.subtle.sign(
+    getSignAlgorithm(privateKey, hashAlgorithm, signatureParams.parameters),
     privateKey,
     pkcs10.tbsView
   )
+
+  if (privateKey.algorithm.name === 'ECDSA') {
+    /* WebCrypto returns the raw `r || s` pair while a PKCS#10 signature holds
+       the DER encoded ECDSA-Sig-Value sequence */
+    signature = pkijs.createCMSECDSASignature(signature)
+  }
+
   pkcs10.signatureValue = new asn1js.BitString({ valueHex: signature })
 
   /* Set signatureAlgorithm */
-  const signatureParams = getSignatureParameters(privateKey, 'SHA-256')
   pkcs10.signatureAlgorithm = signatureParams.signatureAlgorithm
 }
 
