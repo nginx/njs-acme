@@ -21,4 +21,8 @@ class FakeNGX {
 
 const globalAny: Record<string, unknown> = global
 globalAny.ngx = new FakeNGX()
-globalAny.crypto = webcrypto
+
+/* node 19 and later expose webcrypto as a read-only global already */
+if (!globalAny.crypto) {
+  globalAny.crypto = webcrypto
+}
